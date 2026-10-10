@@ -95,4 +95,4 @@ swiftc -O -target arm64-apple-macos14.0 -framework AppKit -framework IOKit \
 step "assembling runner $ID (Mono, Gecko, DXMT, D3DMetal)"
 run assemble "$ROOT/scripts/assemble-runner.sh" "$ID"
 
-printf '\nDone: %s\nNext: scripts/install.sh support && scripts/install.sh steam\n' "$ROOT/dist/runners/$ID"
+printf '\nDone: %s\nNext: woven setup && woven steam patch\n' "$ROOT/dist/runners/$ID"

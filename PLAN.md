@@ -27,7 +27,7 @@ x86_64 Wine (CrossOver 26.x LGPL sources + Proton/Highball patches) under Rosett
 ```
 
 The hook finds functions inside one specific Steam build, so a Steam update would break it.
-Steam is therefore pinned with `steam.cfg` → `BootStrapperInhibitAll=Enable`. When a new Steam build
+Steam is therefore pinned with `steam.cfg` → `BootStrapperInhibitUpdateOnLaunch=enable`, the same setting NotProton uses (`InhibitAll` can stop Steam from signing in). When a new Steam build
 comes out, we update the hook's signature database and then lift the pin.
 
 ## 2. Repository layout
@@ -73,9 +73,9 @@ woven steam pin|unpin             # writes or removes steam.cfg
 | # | Goal | Done when |
 |---|---|---|
 | M0 | Repo scaffold: git, GPL-3, NOTICE/attribution, fork imports at pinned commits (UPSTREAM.md) | ✅ done |
-| M1 | **Engine**: build the runner locally (~20–30 min, ~15 GB) | `d3dprobe` passes on DXMT, D3DMetal and wined3d |
-| M2 | **CLI**: `woven` with doctor/runner/prefix/backend/run | a Windows exe runs via `woven run` |
-| M3 | **Steam integration**: patch, pin, register the compat tool, rename notproton→wovengames (paths, tool name, dylib) | **Expedition 33 installs and plays from macOS Steam's own buttons** |
+| M1 | **Engine**: build the runner locally (~20–30 min, ~15 GB) | ✅ done: `tests/probe-backends.sh` passes all backends on an M4 |
+| M2 | **CLI**: `woven` with doctor/runner/prefix/backend/run | ✅ done: d3dprobe runs via `woven run`, auto backend |
+| M3 | **Steam integration**: patch, pin, register the compat tool, rename notproton→wovengames (paths, tool name, dylib) | **a Windows game installs and plays from macOS Steam's own buttons** (first: Billie's Wheelie, app 3180310; Expedition 33 once there is ~55 GB free) |
 | M4 | **App**: SwiftUI onboarding (permissions, D3DMetal import, Steam patch), per-game settings, one-click uninstall that restores Steam | a non-technical user can set it up |
 | M5 | **Distribution**: CI builds the runner and app and publishes Releases, so users never compile; Steam-build tracking | download, open, play |
 
