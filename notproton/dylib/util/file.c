@@ -45,6 +45,16 @@ uint8_t *np_read_whole_file(const char *path, size_t *out_len) {
     return data;
 }
 
+const char *np_env(const char *name) {
+    char key[128];
+    snprintf(key, sizeof(key), "WOVEN_%s", name);
+    const char *v = getenv(key);
+    if (v && v[0])
+        return v;
+    snprintf(key, sizeof(key), "NOTPROTON_%s", name);
+    return getenv(key);
+}
+
 const char *np_home_dir(void) {
     const char *env = getenv("HOME");
     if (env && env[0])

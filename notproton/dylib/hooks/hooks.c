@@ -5,6 +5,7 @@
 #include "../feats/webui.h"
 #include "../feats/compat.h"
 #include "../util/log.h"
+#include "../util/file.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -13,7 +14,7 @@ typedef void (*np_prehook_fn)(void *address, void *ctx);
 extern int DobbyInstrument(void *address, np_prehook_fn pre_handler);
 
 int np_hooks_env_lists_label(const char *var, const char *label) {
-    const char *list = getenv(var);
+    const char *list = np_env(var);  // var is a WOVEN_/NOTPROTON_ suffix
     if (!list || !list[0] || !label)
         return 0;
 
@@ -51,8 +52,8 @@ static const np_hook_group_t np_steamui_groups[] = {
 // Installs one entry. Returns 1 when the patch lands, 0 when it is skipped or fails.
 static int np_apply_entry(np_resolve_result_t *resolved, const char *group,
                           np_patch_entry_t *e) {
-    if (np_hooks_env_lists_label("NOTPROTON_DISABLE", e->label)) {
-        NP_WARN("[%s] %s: DISABLED via NOTPROTON_DISABLE", group, e->label);
+    if (np_hooks_env_lists_label("DISABLE", e->label)) {
+        NP_WARN("[%s] %s: DISABLED via WOVEN_DISABLE", group, e->label);
         return 0;
     }
 

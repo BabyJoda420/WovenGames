@@ -142,6 +142,12 @@ load_game_env() { # file label
 }
 load_game_env "$HOME/Library/Application Support/WovenGames/compat/$app_id.env" "compat default"
 load_game_env "$HOME/Library/Application Support/WovenGames/games/$app_id.env" "game setting"
+# The settings' older NOTPROTON_* names still work.
+for n in RETINA SYSHUD SYSHUD_OFFSET HIDE_LAUNCHER_TILE; do
+  eval "new=\${WOVEN_$n+x} old=\${NOTPROTON_$n-}"
+  # shellcheck disable=SC2154 # eval assigns new and old
+  if [ -z "$new" ] && [ -n "$old" ]; then export "WOVEN_$n=$old"; fi
+done
 
 [ -n "$SteamAppId" ] || export SteamAppId="$app_id"
 [ -n "$SteamGameId" ] || export SteamGameId="$app_id"
@@ -350,8 +356,8 @@ if [ -n "$STEAM_COMPAT_DATA_PATH" ]; then
   "$WINELOADER" reg add 'HKLM\Software\Wow6432Node\Microsoft\Windows NT\CurrentVersion\AeDebug' /v Auto /t REG_SZ /d 0 /f >> "$log" 2>&1 || true
   "$WINELOADER" reg add 'HKCU\Software\Wine\WineDbg' /v ShowCrashDialog /t REG_DWORD /d 0 /f >> "$log" 2>&1 || true
 
-  echo "video: RetinaMode=${NOTPROTON_RETINA:-0}" >> "$log" 2>&1 || true
-  if [ "$NOTPROTON_RETINA" = "1" ]; then
+  echo "video: RetinaMode=${WOVEN_RETINA:-0}" >> "$log" 2>&1 || true
+  if [ "$WOVEN_RETINA" = "1" ]; then
     "$WINELOADER" reg add 'HKCU\Software\Wine\Mac Driver' /v RetinaMode /t REG_SZ /d y /f >> "$log" 2>&1 || true
   else
     "$WINELOADER" reg delete 'HKCU\Software\Wine\Mac Driver' /v RetinaMode /f >> "$log" 2>&1 || true
@@ -573,8 +579,7 @@ fi
 # Apple's Metal Performance HUD: when it is on and nothing else is configured, keep it small
 # in the top-right corner with just the frame rate and frame time.
 # Below it, syshud adds what Metal cannot show (CPU/GPU load, RAM, OS, runner, backend);
-# NOTPROTON_SYSHUD=0 leaves it out.
-syshud_pid=""
+# WOVEN_SYSHUD=0 leaves it out.
 if [ "${MTL_HUD_ENABLED:-0}" = 1 ]; then
   export MTL_HUD_ALIGNMENT="${MTL_HUD_ALIGNMENT:-topright}"
   export MTL_HUD_SCALE="${MTL_HUD_SCALE:-0.12}"
@@ -582,14 +587,13 @@ if [ "${MTL_HUD_ENABLED:-0}" = 1 ]; then
   export MTL_HUD_ELEMENTS="${MTL_HUD_ELEMENTS:-fps,frameinterval,gputime,presentdelay,layersize,memory,fpsgraph}"
   echo "hud: $MTL_HUD_ALIGNMENT scale=$MTL_HUD_SCALE elements=$MTL_HUD_ELEMENTS" >> "$log" 2>&1 || true
   syshud="$HOME/Library/Application Support/WovenGames/syshud"
-  if [ "${NOTPROTON_SYSHUD:-1}" = 1 ] && [ -x "$syshud" ] && [ "$verb" != run ]; then
+  if [ "${WOVEN_SYSHUD:-1}" = 1 ] && [ -x "$syshud" ] && [ "$verb" != run ]; then
     rows=$(printf '%s' "$MTL_HUD_ELEMENTS" | tr ',' '\n' | grep -c .)
     case ",$MTL_HUD_ELEMENTS," in *graph*|*histogram*) rows=$((rows + 3)) ;; esac
     wine_label="$(sed -n 's/.*"wine": "\(.*\)".*/\1/p' "$CX_ROOT/runner.json" 2>/dev/null) ($(readlink "$CX_ROOT" 2>/dev/null || echo runner))"
-    "$syshud" --offset "${NOTPROTON_SYSHUD_OFFSET:-$((14 + rows * 14))}" \
+    "$syshud" --offset "${WOVEN_SYSHUD_OFFSET:-$((14 + rows * 14))}" \
       --label "Wine: $wine_label" --label "Graphics: ${backend:-${CX_ACTIVE_GRAPHICS_BACKEND:-?}} (Rosetta)" \
-      --pid $$ --app "com.wovengames.launcher.$app_id" >> "$log" 2>&1 &
-    syshud_pid=$!
+      --pid $$ --app "com.wovengames.launcher.$app_id" >> "$log" 2>&1 &  # exits with this pid
   fi
 fi
 
@@ -728,9 +732,9 @@ resolve_icon || true
 [ -n "$icon_arg" ] || echo "no icon resolved, launching without one" >> "$log" 2>&1 || true
 
 uielement_arg=""
-if [ "${NOTPROTON_HIDE_LAUNCHER_TILE:-0}" = "1" ]; then
+if [ "${WOVEN_HIDE_LAUNCHER_TILE:-0}" = "1" ]; then
   uielement_arg="  <key>LSUIElement</key><true/>"
-  echo "launcher tile hidden by NOTPROTON_HIDE_LAUNCHER_TILE" >> "$log" 2>&1 || true
+  echo "launcher tile hidden by WOVEN_HIDE_LAUNCHER_TILE" >> "$log" 2>&1 || true
 fi
 cat > "$loader_contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -779,12 +783,12 @@ shim="$HOME/Library/Application Support/WovenGames/overlay-shim.dylib"
 if [ -n "\$STEAM_DYLD_INSERT_LIBRARIES" ]; then
   if [ -f "\$shim" ]; then
     export DYLD_INSERT_LIBRARIES="\$shim:\$STEAM_DYLD_INSERT_LIBRARIES"
-    export NOTPROTON_OVERLAY_SHIM="\$shim"
+    export WOVEN_OVERLAY_SHIM="\$shim"
   else
     export DYLD_INSERT_LIBRARIES="\$STEAM_DYLD_INSERT_LIBRARIES"
   fi
 fi
-[ -n "\$NOTPROTON_GAME_CWD" ] && cd "\$NOTPROTON_GAME_CWD"
+[ -n "\$WOVEN_GAME_CWD" ] && cd "\$WOVEN_GAME_CWD"
 "$WINELOADER" "\$@"
 exit \$?
 LAUNCHER
@@ -890,7 +894,7 @@ set -- \
   --env STEAM_COMPAT_CLIENT_INSTALL_PATH="$STEAM_COMPAT_CLIENT_INSTALL_PATH" \
   --env STEAM_COMPAT_APP_ID="$STEAM_COMPAT_APP_ID" \
   --env STEAM_DYLD_INSERT_LIBRARIES="$STEAM_DYLD_INSERT_LIBRARIES" \
-  --env NOTPROTON_GAME_CWD="$game_cwd" "$@"
+  --env WOVEN_GAME_CWD="$game_cwd" "$@"
 lsregister="/System/Library/Frameworks/CoreServices.framework/Versions/A"
 lsregister="$lsregister/Frameworks/LaunchServices.framework/Support/lsregister"
 [ -x "$lsregister" ] && "$lsregister" -f "$loader_app" >> "$log" 2>&1 || true

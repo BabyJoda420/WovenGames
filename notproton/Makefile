@@ -7,7 +7,7 @@ CFLAGS   := -arch $(ARCH) -mmacosx-version-min=$(MIN_VER) \
             -fPIC -MMD -MP \
             -Idylib -Ivendor -Ivendor/dobby/include
 LDFLAGS  := -arch $(ARCH) -mmacosx-version-min=$(MIN_VER) \
-            -dynamiclib -install_name @rpath/notproton.dylib
+            -dynamiclib -install_name @rpath/wovengames.dylib
 
 FRAMEWORKS := -framework CoreFoundation
 
@@ -48,9 +48,9 @@ GENERATED_DIR := $(OUT_DIR)/generated
 RUN_SCRIPT_H  := $(GENERATED_DIR)/compat_run.h
 CFLAGS += -I$(GENERATED_DIR)
 
-ARM64_DYLIB := $(OUT_DIR)/notproton.arm64.dylib
-X86_STUB    := $(OUT_DIR)/notproton.x86_64.dylib
-TARGET      := $(OUT_DIR)/notproton.dylib
+ARM64_DYLIB := $(OUT_DIR)/wovengames.arm64.dylib
+X86_STUB    := $(OUT_DIR)/wovengames.x86_64.dylib
+TARGET      := $(OUT_DIR)/wovengames.dylib
 
 OBJS := $(patsubst %.c,$(OUT_DIR)/%.o,$(SRCS))
 DEPS := $(OBJS:.o=.d)
@@ -297,7 +297,7 @@ $(ARM64_DYLIB): $(OBJS)
 $(X86_STUB): dylib/stub_x86_64.c
 	@mkdir -p $(dir $@)
 	$(CC) -arch x86_64 -mmacosx-version-min=$(MIN_VER) \
-		-dynamiclib -install_name @rpath/notproton.dylib \
+		-dynamiclib -install_name @rpath/wovengames.dylib \
 		-o $@ $<
 
 $(TARGET): $(ARM64_DYLIB) $(X86_STUB)
@@ -315,7 +315,7 @@ $(RUN_SCRIPT_H): dylib/feats/compat_run.sh dylib/embed_script.py
 
 $(OUT_DIR)/dylib/feats/compat.o: $(RUN_SCRIPT_H)
 
-SUPPORT_DIR        := $(HOME)/Library/Application Support/notproton
+SUPPORT_DIR        := $(HOME)/Library/Application Support/WovenGames
 OVERLAY_SHIM_SRC   := overlay-shim/overlay_shim.m
 OVERLAY_SHIM_ARM   := $(OUT_DIR)/overlay-shim.arm64.dylib
 OVERLAY_SHIM_X86   := $(OUT_DIR)/overlay-shim.x86_64.dylib
@@ -419,8 +419,8 @@ dobby:
 	$(MAKE) -C $(DOBBY_DIR) -j$(shell sysctl -n hw.ncpu)
 
 STEAM_APP    := /Applications/Steam.app
-DEPLOY_DST   := $(STEAM_APP)/Contents/MacOS/notproton.dylib
-INSTALL_DST  := $(SUPPORT_DIR)/notproton.dylib
+DEPLOY_DST   := $(STEAM_APP)/Contents/MacOS/wovengames.dylib
+INSTALL_DST  := $(SUPPORT_DIR)/wovengames.dylib
 
 dylib-install: $(TARGET)
 	$(call install_atomically,$(TARGET),$(INSTALL_DST))

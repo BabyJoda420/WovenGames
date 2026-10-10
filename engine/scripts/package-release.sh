@@ -31,7 +31,7 @@ GPTK_SHA=d377683937340f914823dbb2e1252b329cbf834ff58907d0293db8cebf0e392e
 
 need() { [ -e "$1" ] || { echo "missing $1 (run scripts/build-all.sh)" >&2; exit 1; }; }
 need "$RUNNER/runner.json"
-need "$NP/out/notproton.dylib"
+need "$NP/out/wovengames.dylib"
 need "$ROOT/build/helpers/pe-d3d"
 
 rm -rf "$STAGE" && mkdir -p "$STAGE/support" "$OUT"
@@ -39,7 +39,7 @@ ditto "$RUNNER" "$STAGE/runner"
 # Apple's files stay out of the release
 rm -rf "$STAGE/runner/lib/external" "$STAGE/runner/lib/renderers/d3dmetal"
 
-cp "$NP/out/notproton.dylib" "$STAGE/support/wovengames.dylib"
+cp "$NP/out/wovengames.dylib" "$STAGE/support/wovengames.dylib"
 for f in overlay-shim.dylib iconmaker appinfo; do cp "$NP/out/$f" "$STAGE/support/$f"; done
 for f in pe-d3d syshud; do cp "$ROOT/build/helpers/$f" "$STAGE/support/$f"; done
 sed -n 's/.*_VERSION[^"]*"\([^"]*\)".*/\1/p' "$NP/dylib/version.h" | head -1 > "$STAGE/support/dylib.version"

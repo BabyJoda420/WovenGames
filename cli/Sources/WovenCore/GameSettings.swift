@@ -31,7 +31,7 @@ public struct GameSettings: Equatable, Sendable {
     static let backendKey = "CX_GRAPHICS_BACKEND"
     static let hudKey = "MTL_HUD_ENABLED"
     static let msyncKey = "WINEMSYNC"
-    static let retinaKey = "NOTPROTON_RETINA"
+    static let retinaKey = "WOVEN_RETINA"
     static let argsKey = "WOVEN_GAME_ARGS"
 
     public init() {}
@@ -55,7 +55,7 @@ public struct GameSettings: Equatable, Sendable {
             case Self.backendKey: backend = BackendChoice(rawValue: value) ?? .auto
             case Self.hudKey: metalHUD = value == "1"
             case Self.msyncKey: msync = value != "0"
-            case Self.retinaKey: retina = value == "1"
+            case Self.retinaKey, "NOTPROTON_RETINA": retina = value == "1"  // older name still read
             case Self.argsKey: gameArgs = value
             default: otherLines.append(line)
             }

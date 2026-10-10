@@ -56,7 +56,7 @@ public struct EngineBuild: Sendable {
         let header = (try? String(contentsOf: root.appending(path: "notproton/dylib/version.h"), encoding: .utf8)) ?? ""
         return Payload(
             runner: dist.appending(path: runnerID),
-            hook: out.appending(path: "notproton.dylib"),
+            hook: out.appending(path: "wovengames.dylib"),
             helpers: ["overlay-shim.dylib": out.appending(path: "overlay-shim.dylib"),
                       "iconmaker": out.appending(path: "iconmaker"),
                       "appinfo": out.appending(path: "appinfo"),

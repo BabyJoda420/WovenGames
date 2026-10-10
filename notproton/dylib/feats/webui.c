@@ -4,6 +4,7 @@
 #include "../core/macho.h"
 #include "../util/log.h"
 #include "../util/ptr.h"
+#include "../util/file.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -299,7 +300,7 @@ static int walk_routes(uintptr_t *elements_out, int *bound_out) {
 void np_webui_dump_routes(void) {
     uintptr_t elements;
     int bound;
-    if (!getenv("NOTPROTON_WEBUI_ROUTES") || !walk_routes(&elements, &bound)) return;
+    if (!np_env("WEBUI_ROUTES") || !walk_routes(&elements, &bound)) return;
 
     int named = 0;
     for (int i = 0; i < bound; i++) {

@@ -57,7 +57,7 @@ int np_hooks_install_steamui(const struct mach_header_64 *mh, intptr_t slide,
                              np_resolve_result_t *resolved, int *total_out);
 
 // True when `label` is one entry of the comma-separated value of env var `var`.
-// NOTPROTON_DISABLE uses this to skip named hooks.
+// WOVEN_DISABLE (or NOTPROTON_DISABLE) uses this to skip named hooks.
 int np_hooks_env_lists_label(const char *var, const char *label);
 
 // Resolved from libc rather than the signature database, and installed before the client

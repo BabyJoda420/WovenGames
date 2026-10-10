@@ -154,7 +154,7 @@ static int out_expand(np_out_t *o, const char *replace, const np_cap_t *caps) {
     "\"dxmt\"===b&&T([\"DXMT_ENABLE_NVEXT\"],\"DLSS\",\"1\")," \
     "T([\"ROSETTA_ADVERTISE_AVX\"],\"Advertise AVX2 to Rosetta\",\"1\",\"0\")," \
     "T([\"WINEMSYNC\"],\"MSync\",\"1\",\"0\",\"1\")," \
-    "T([\"NOTPROTON_RETINA\"],\"High Resolution\",\"1\",\"0\")" \
+    "T([\"WOVEN_RETINA\"],\"High Resolution\",\"1\",\"0\")" \
     "]},\"gfx\")," \
     "dx&&(0," RT ".jsx)(" BARREL ".XY," \
     "{label:\"MetalFX Upscaling (Samples from the resolution the game is set to)\"," \

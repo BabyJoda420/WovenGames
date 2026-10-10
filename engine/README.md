@@ -1,5 +1,8 @@
 # steamplay-mac
 
+> **WovenGames note:** this is steamplay-mac's README, kept for reference. In WovenGames, `scripts/install.sh` is replaced by the `woven` tool (`woven setup`, `woven steam patch`) and the WovenGames app. The hook is built as `wovengames.dylib`, and its files live in `~/Library/Application Support/WovenGames`.
+
+
 Play Windows games from the **native macOS Steam client** on Apple Silicon. You install them in
 Steam and click Play, much like Steam Play/Proton on Linux. Instead of a licensed CrossOver
 install, the runner is a **Wine you build yourself**.

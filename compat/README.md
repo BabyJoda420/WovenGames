@@ -6,7 +6,7 @@ before every launch.
 
 - Lines are `KEY=VALUE`, and `#` starts a comment. Allowed names: `CX_GRAPHICS_BACKEND`
   (`d3dmetal`, `dxmt`, `wined3d`), `WOVEN_GAME_ARGS` (extra game arguments), and `WINE*`, `DXMT_*`,
-  `D3DM_*`, `MTL_*`, `ROSETTA_*`, `NOTPROTON_*`.
+  `D3DM_*`, `MTL_*`, `ROSETTA_*` (and `NOTPROTON_*`, the older name of `WOVEN_*` settings).
 - Priority, highest first: Steam launch options, then the user's settings in the app
   (`games/<appid>.env`), then these files, then `global.env`.
 - Say in a comment what fails without the setting, and on which Mac, macOS and Steam build it

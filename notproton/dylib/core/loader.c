@@ -80,7 +80,7 @@ static int pick_latest_sigdb(const char *dir, char *buf, size_t buf_size) {
 }
 
 static void sigdb_path_for(char *buf, size_t buf_size) {
-    const char *env = getenv("NOTPROTON_SIG");
+    const char *env = np_env("SIG");
     if (env && env[0]) {
         snprintf(buf, buf_size, "%s", env);
         return;
