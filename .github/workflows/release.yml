@@ -32,7 +32,14 @@ jobs:
       - name: Version
         id: version
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"; else v="$(cat VERSION)-dev.${GITHUB_RUN_NUMBER}"; fi
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            v="${GITHUB_REF_NAME#v}"
+            # a tag must match what the app and the CLI report, or the release lies about its version
+            [ "$v" = "$(cat VERSION)" ] || { echo "::error::tag $v but VERSION says $(cat VERSION)"; exit 1; }
+            grep -q "version: \"$v\"" cli/Sources/woven/Woven.swift || { echo "::error::cli/Sources/woven/Woven.swift does not say $v"; exit 1; }
+          else
+            v="$(cat VERSION)-dev.${GITHUB_RUN_NUMBER}"
+          fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "WovenGames $v"
 

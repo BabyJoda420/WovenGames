@@ -6,7 +6,7 @@ set -euo pipefail
 
 CLI="$(cd "$(dirname "$0")/.." && pwd)"
 APP="$CLI/.build/WovenGames.app"
-VERSION="0.1.0"
+VERSION="$(cat "$CLI/../VERSION")"
 
 # Stale Command Line Tools cannot build SwiftUI's Observation code; use an installed Xcode.
 if [ -z "${DEVELOPER_DIR:-}" ] && [ "$(xcrun --show-sdk-version 2>/dev/null | cut -d. -f1)" -lt 14 ] 2>/dev/null; then
