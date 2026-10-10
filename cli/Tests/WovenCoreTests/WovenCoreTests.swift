@@ -266,7 +266,7 @@ final class SteamPatcherTests: XCTestCase {
         try fm.copyItem(at: plistURL, to: npBackups.appending(path: "Info.plist.before-notproton"))
         let np = app.appending(path: "Contents/MacOS/notproton.dylib")
         try fm.copyItem(at: home.appending(path: "Library/Application Support/WovenGames/wovengames.dylib"), to: np)
-        let patched: [String: Any] = ["CFBundleExecutable": "steam_osx",
+        let patched: [String: Any] = ["CFBundleIdentifier": "com.valvesoftware.steam", "CFBundleExecutable": "steam_osx",
                                       "LSEnvironment": ["LC_ALL": "en_US.UTF-8", "DYLD_INSERT_LIBRARIES": np.path(percentEncoded: false)]]
         try PropertyListSerialization.data(fromPropertyList: patched, format: .xml, options: 0).write(to: plistURL)
 
@@ -393,7 +393,7 @@ extension LibraryTests {
         let s = GameSettings(parsing: try String(contentsOf: url, encoding: .utf8))
         XCTAssertEqual(s.backend, .dxmt)
         XCTAssertEqual(s.gameArgs, "-dx11")
-        XCTAssertEqual(s.otherLines, [])
+        XCTAssertTrue(s.otherLines.allSatisfy { $0.hasPrefix("#") }, "only comments besides known keys")
         XCTAssertEqual(s.summary, "DXMT · -dx11")
     }
 }
@@ -510,5 +510,34 @@ final class AppManagementTests: XCTestCase {
         XCTAssertThrowsError(try patcher.patch()) { error in
             guard case SteamPatchError.appManagementDenied = error else { return XCTFail("got \(error)") }
         }
+    }
+}
+
+extension LibraryTests {
+    func testSettingsParserSurvivesJunk() {
+        let s = GameSettings(parsing: "=\n==\n=x\nMTL_HUD_ENABLED=1\n# note\n")
+        XCTAssertTrue(s.metalHUD)
+        XCTAssertEqual(s.otherLines, ["=", "==", "=x", "# note"])
+    }
+
+    func testRestoreSkipsABackupOfAnotherSteamBuild() {
+        XCTAssertTrue(SteamPatcher.sameBundle(["CFBundleVersion": "6.1"], ["CFBundleVersion": "6.1"]))
+        XCTAssertFalse(SteamPatcher.sameBundle(["CFBundleVersion": "6.1"], ["CFBundleVersion": "6.2"]))
+    }
+}
+
+extension SteamBuildsTests {
+    func testReusedPidDoesNotResurrectAnOldSession() throws {
+        let log = """
+        2026-10-01 10:00:00 [wovengames] info np_init: loaded into steam_osx (pid 500) version 1.0.3
+        2026-10-01 10:00:02 [wovengames] info install_thread: signatures 15/15 resolved
+        2026-10-01 10:00:02 [wovengames] info hooks: 8/8 installed
+        2026-10-10 10:00:00 [wovengames] info np_init: loaded into steam_osx (pid 500) version 1.0.3
+        2026-10-10 10:00:02 [wovengames] info install_thread: signatures 3/15 resolved
+        2026-10-10 10:00:02 [wovengames] info hooks: 1/8 installed
+        """
+        let s = try XCTUnwrap(HookSession.last(inLog: log))
+        XCTAssertEqual(s.signatures, .init(done: 3, total: 15))
+        XCTAssertFalse(s.healthy)
     }
 }

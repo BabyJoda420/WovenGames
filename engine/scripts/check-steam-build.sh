@@ -58,7 +58,7 @@ BUILD="$(echo "$entries" | awk '$1=="version"{print $2}')"
 echo "Steam $CHANNEL build $BUILD"
 
 MACOS="$WORK/home/Library/Application Support/Steam/Steam.AppBundle/Steam/Contents/MacOS"
-rm -rf "$WORK/home" && mkdir -p "$MACOS"
+rm -rf "${WORK:?}/home" && mkdir -p "$MACOS"
 while read -r file sha; do
     [ "$file" = version ] && continue
     out="$DL/$file"

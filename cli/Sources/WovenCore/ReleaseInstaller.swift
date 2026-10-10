@@ -48,13 +48,27 @@ public struct ReleaseInstaller: Sendable {
     /// Installs from a release archive (.tar.xz) on disk or at a URL.
     public func install(archive: URL, log: @escaping @Sendable (String) -> Void = { _ in }) async throws {
         let fm = FileManager.default
+        if RunnerStore(paths: paths).inUse() { throw RunnerError.inUse }
         let local: URL
         if archive.isFileURL {
             local = archive
+            if let expected = (try? String(contentsOf: URL(filePath: archive.path(percentEncoded: false) + ".sha256"), encoding: .utf8))
+                .flatMap(Self.firstHash) {
+                guard Self.sha256(of: local) == expected else { throw ReleaseError.hashMismatch(local.lastPathComponent) }
+                log("archive matches its .sha256")
+            }
         } else {
             local = cache.appending(path: archive.lastPathComponent)
+            // the release publishes <archive>.sha256: verify against it, and reuse a cached copy that matches
+            var expected: String?
+            if let url = URL(string: archive.absoluteString + ".sha256"),
+               let (data, response) = try? await URLSession.shared.data(from: url),
+               (response as? HTTPURLResponse)?.statusCode == 200 {
+                expected = Self.firstHash(String(decoding: data, as: UTF8.self))
+            }
+            if expected == nil { log("no .sha256 published next to the archive; relying on HTTPS only") }
             log("downloading \(archive.lastPathComponent)...")
-            try await download(archive, to: local, sha256: nil)
+            try await download(archive, to: local, sha256: expected)
         }
 
         let work = cache.appending(path: "unpacked-\(UUID().uuidString)")
@@ -225,6 +239,12 @@ public struct ReleaseInstaller: Sendable {
     func run(_ tool: String, _ args: [String], _ what: String) throws {
         let r = Shell.capture(tool, args)
         guard r.status == 0 else { throw ReleaseError.badRelease("\(what) failed: \(r.output.suffix(400))") }
+    }
+
+    /// The first 64-hex-digit word of a `shasum -a 256` line.
+    static func firstHash(_ text: String) -> String? {
+        text.split(whereSeparator: \.isWhitespace).map(String.init)
+            .first { $0.count == 64 && $0.allSatisfy(\.isHexDigit) }?.lowercased()
     }
 
     static func sha256(of url: URL) -> String? {

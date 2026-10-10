@@ -177,7 +177,7 @@ refuse_foreign_prefix() {
   esac
   have=$(prefix_machine) || return 0
   [ "$have" = "$want" ] && return 0
-  echo "=== prefix ntdll is $have and this compatibility tool wants $want, rebuild the prefix (woven prefix delete) ===" >> "$log" 2>&1 || true
+  echo "=== prefix ntdll is $have and this compatibility tool wants $want, reset the game's prefix in the WovenGames app (Games, Reset Prefix) ===" >> "$log" 2>&1 || true
 
   if [ "$verb" != run ]; then
     osascript >/dev/null 2>&1 <<APPLESCRIPT || true

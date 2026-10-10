@@ -32,11 +32,17 @@ public struct HookSession: Equatable, Sendable {
 
     /// The last session in a hook log.
     public static func last(inLog text: String) -> HookSession? {
-        // np_init logs more than once per launch; a session starts at its pid's first line
+        // np_init logs more than once per launch; the session starts at the first of the
+        // markers that directly precede the last one with the same pid (pids get reused, so an
+        // older session with this pid must not count)
         let marker = try! Regex(#"np_init: loaded into steam_osx \(pid (\d+)\)"#)
-        guard let last = text.matches(of: marker).last, let pid = last.output[1].substring else { return nil }
-        guard let first = text.range(of: "np_init: loaded into steam_osx (pid \(pid))") else { return nil }
-        let sessionStart = text[..<first.lowerBound].lastIndex(of: "\n").map { text.index(after: $0) } ?? text.startIndex
+        let markers = text.matches(of: marker)
+        guard var first = markers.indices.last, let pid = markers[first].output[1].substring else { return nil }
+        while first > markers.startIndex, markers[first - 1].output[1].substring == pid,
+              !text[markers[first - 1].range.upperBound..<markers[first].range.lowerBound].contains("install_thread") {
+            first -= 1
+        }
+        let sessionStart = text[..<markers[first].range.lowerBound].lastIndex(of: "\n").map { text.index(after: $0) } ?? text.startIndex
         let session = text[sessionStart...]
         var result = HookSession()
         let stamp = DateFormatter()
@@ -45,7 +51,7 @@ public struct HookSession: Equatable, Sendable {
         result.started = stamp.date(from: String(session.prefix(19)))
 
         func count(_ pattern: String) -> Count? {
-            guard let m = session.firstMatch(of: try! Regex(pattern)),
+            guard let m = session.matches(of: try! Regex(pattern)).last,
                   let a = m.output[1].substring.flatMap({ Int($0) }),
                   let b = m.output[2].substring.flatMap({ Int($0) }) else { return nil }
             return Count(done: a, total: b)

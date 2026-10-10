@@ -133,23 +133,35 @@ public struct SteamPatcher: Sendable {
         guard fm.fileExists(atPath: steam.app.path(percentEncoded: false)) else { throw SteamPatchError.steamMissing }
         try checkAccess()
         try quitSteam(log: log)
-        if let data = try? Data(contentsOf: originalPlist) {
+        let current = try readPlist()
+        if let data = try? Data(contentsOf: originalPlist),
+           let backup = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+           Self.sameBundle(backup, current) {
             try data.write(to: steam.infoPlist)
             log("restored Info.plist from \(originalPlist.path(percentEncoded: false))")
         } else {
+            if fm.fileExists(atPath: originalPlist.path(percentEncoded: false)) {
+                log("Steam.app changed since the backup was taken; removing only the hook settings")
+            }
             var plist = try readPlist()
             var env = plist["LSEnvironment"] as? [String: Any] ?? [:]
             env.removeValue(forKey: Self.insertKey)
             env.removeValue(forKey: Self.controllerBlockKey)
             plist["LSEnvironment"] = env
             try writePlist(plist)
-            log("removed the insert from Info.plist (no backup found)")
+            log("removed the hook settings from Info.plist")
         }
         try? fm.removeItem(at: deployedDylib)
         try? fm.removeItem(at: notProtonDylib)
         try? fm.removeItem(at: steam.compatTools.appending(path: "wovengames-proton"))
         try resign(log: log)
         log("Steam restored (ad-hoc signed; reinstall Steam from steampowered.com for Valve's own signature)")
+    }
+
+    /// A backup only fits the Steam.app it was taken from.
+    static func sameBundle(_ a: [String: Any], _ b: [String: Any]) -> Bool {
+        ["CFBundleIdentifier", "CFBundleVersion", "CFBundleShortVersionString", "CFBundleExecutable"]
+            .allSatisfy { (a[$0] as? String) == (b[$0] as? String) }
     }
 
     // MARK: update pin

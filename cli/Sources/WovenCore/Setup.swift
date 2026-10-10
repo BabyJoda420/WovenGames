@@ -74,6 +74,8 @@ public struct EngineBuild: Sendable {
 public struct Setup: Sendable {
     public var paths: Paths
     public var payload: Payload
+    /// refuse to replace the engine while a game runs on it
+    public var checkRunningGames = true
 
     public init(paths: Paths = Paths(), payload: Payload? = nil) {
         self.paths = paths
@@ -89,6 +91,7 @@ public struct Setup: Sendable {
         try require(payload.runner.appending(path: "runner.json"), "the Wine runner")
         try require(payload.hook, "the Steam hook")
         try require(payload.valveBridge.appending(path: "steamclient64.dll"), "Valve's bridge DLLs")
+        if checkRunningGames, RunnerStore(paths: paths).inUse() { throw RunnerError.inUse }
 
         let runner = try RunnerStore(paths: paths).install(from: payload.runner)
         _ = Shell.capture("/usr/bin/xattr", ["-dr", "com.apple.quarantine", runner.root.path(percentEncoded: false)])

@@ -39,12 +39,14 @@ public enum RunnerError: Error, CustomStringConvertible {
     case notARunner(URL)
     case unknown(String)
     case noCurrent
+    case inUse
 
     public var description: String {
         switch self {
         case .notARunner(let url): "\(url.path(percentEncoded: false)) has no runner.json"
         case .unknown(let id): "no installed runner named \(id) (see `woven runner list`)"
         case .noCurrent: "no runner selected; build one (engine/scripts/build-all.sh), then `woven runner install`"
+        case .inUse: "a game is running on WovenGames; quit it first (replacing the engine under a running game crashes it)"
         }
     }
 }
@@ -53,6 +55,11 @@ public struct RunnerStore: Sendable {
     public var paths: Paths
 
     public init(paths: Paths = Paths()) { self.paths = paths }
+
+    /// True while any Wine process runs from an installed runner (a game, or `woven run`).
+    public func inUse() -> Bool {
+        Shell.capture("/usr/bin/pgrep", ["-f", paths.runners.path(percentEncoded: false) + "/"]).status == 0
+    }
 
     public func list() -> [Runner] {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: paths.runners.path(percentEncoded: false))) ?? []
@@ -75,16 +82,23 @@ public struct RunnerStore: Sendable {
         let fm = FileManager.default
         try fm.createDirectory(at: paths.runners, withIntermediateDirectories: true)
         let dest = paths.runners.appending(path: built.id)
+        // build the new copy next to the old one, then swap: a failed copy keeps the old runner
+        let staging = paths.runners.appending(path: ".\(built.id).new")
+        try? fm.removeItem(at: staging)
+        if link {
+            try fm.createSymbolicLink(at: staging, withDestinationURL: source.standardizedFileURL)
+        } else {
+            // ditto keeps symlinks, permissions and code signatures intact
+            let r = Shell.capture("/usr/bin/ditto", [source.path(percentEncoded: false), staging.path(percentEncoded: false)])
+            guard r.status == 0 else {
+                try? fm.removeItem(at: staging)
+                throw RunnerError.notARunner(source)
+            }
+        }
         if fm.fileExists(atPath: dest.path(percentEncoded: false)) || (try? fm.destinationOfSymbolicLink(atPath: dest.path(percentEncoded: false))) != nil {
             try fm.removeItem(at: dest)
         }
-        if link {
-            try fm.createSymbolicLink(at: dest, withDestinationURL: source.standardizedFileURL)
-        } else {
-            // ditto keeps symlinks, permissions and code signatures intact
-            let r = Shell.capture("/usr/bin/ditto", [source.path(percentEncoded: false), dest.path(percentEncoded: false)])
-            guard r.status == 0 else { throw RunnerError.notARunner(source) }
-        }
+        try fm.moveItem(at: staging, to: dest)
         try use(built.id)
         return try Runner(root: dest)
     }

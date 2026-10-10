@@ -77,7 +77,7 @@ public struct SteamLibrary: Sendable {
     static func hasWindowsExecutable(_ dir: URL) -> Bool {
         guard let walker = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: nil) else { return false }
         for case let url as URL in walker {
-            if walker.level > 3 { walker.skipDescendants(); continue }
+            if walker.level > 5 { walker.skipDescendants(); continue }  // UE: Game/Binaries/Win64/x.exe
             if url.pathExtension.lowercased() == "exe" { return true }
         }
         return false

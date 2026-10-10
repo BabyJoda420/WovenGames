@@ -48,9 +48,14 @@ public struct GameSettings: Equatable, Sendable {
     public init(parsing text: String) {
         for raw in text.split(whereSeparator: \.isNewline) {
             let line = raw.trimmingCharacters(in: .whitespaces)
-            guard !line.isEmpty, !line.hasPrefix("#") else { continue }
-            let parts = line.split(separator: "=", maxSplits: 1).map(String.init)
-            let key = parts[0], value = parts.count > 1 ? parts[1] : ""
+            guard !line.isEmpty else { continue }
+            // comments and anything without a KEY= are kept as they are
+            let parts = line.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+            guard !line.hasPrefix("#"), parts.count == 2, let key = parts.first, !key.isEmpty else {
+                otherLines.append(line)
+                continue
+            }
+            let value = parts[1]
             switch key {
             case Self.backendKey: backend = BackendChoice(rawValue: value) ?? .auto
             case Self.hudKey: metalHUD = value == "1"
