@@ -30,7 +30,14 @@ The hook finds functions inside one specific Steam build, so a Steam update woul
 Steam is therefore pinned with `steam.cfg` → `BootStrapperInhibitAll=Enable`. When a new Steam build
 comes out, we update the hook's signature database and then lift the pin.
 
-## 2. Repository layout (planned)
+## 2. Repository layout
+
+Current state: `engine/` (steamplay-mac) and `notproton/` (the NotProton fork, kept whole so upstream fixes still merge cleanly).
+The split into `steamhook/` and `bridge/` below is the target layout, done during M3.
+
+Engine build output goes to `~/Library/Caches/WovenGames/engine` (about 15 GB), because the repo path contains spaces.
+
+### Target layout
 
 | Path | What it holds | Origin |
 |---|---|---|
@@ -65,16 +72,16 @@ woven steam pin|unpin             # writes or removes steam.cfg
 
 | # | Goal | Done when |
 |---|---|---|
-| M0 | Repo scaffold: git, GPL-3, NOTICE/attribution, fork imports, rename notproton→wovengames | builds unchanged from the forks |
+| M0 | Repo scaffold: git, GPL-3, NOTICE/attribution, fork imports at pinned commits (UPSTREAM.md) | ✅ done |
 | M1 | **Engine**: build the runner locally (~20–30 min, ~15 GB) | `d3dprobe` passes on DXMT, D3DMetal and wined3d |
 | M2 | **CLI**: `woven` with doctor/runner/prefix/backend/run | a Windows exe runs via `woven run` |
-| M3 | **Steam integration**: patch, pin and register the compat tool | **Expedition 33 installs and plays from macOS Steam's own buttons** |
+| M3 | **Steam integration**: patch, pin, register the compat tool, rename notproton→wovengames (paths, tool name, dylib) | **Expedition 33 installs and plays from macOS Steam's own buttons** |
 | M4 | **App**: SwiftUI onboarding (permissions, D3DMetal import, Steam patch), per-game settings, one-click uninstall that restores Steam | a non-technical user can set it up |
 | M5 | **Distribution**: CI builds the runner and app and publishes Releases, so users never compile; Steam-build tracking | download, open, play |
 
 ## 5. Things you'll need to do yourself (I can't do these for you)
 
-- Download **Apple Game Porting Toolkit 3.0** (for D3DMetal) from developer.apple.com. It needs your Apple ID sign-in, and Apple's license doesn't let us redistribute it.
+- D3DMetal: for local builds the engine fetches Gcenx's hash-pinned repack of Apple's GPTK 3.0, which Apple's license allows for personal, non-commercial use. For **public releases (M5)** we must make sure we don't redistribute it beyond those terms, e.g. by having the app download it on the user's Mac.
 - Grant **App Management** permission in System Settings so we can modify Steam.app.
 - Sign in to Steam yourself; WovenGames never handles credentials.
 - Later (M5): an Apple Developer ID (99 USD/year) if you want signed, notarized releases. Without one, users must right-click → Open.
