@@ -79,6 +79,8 @@ woven steam pin|unpin             # writes or removes steam.cfg
 | M4 | **App**: SwiftUI onboarding (permissions, D3DMetal import, Steam patch), per-game settings, one-click uninstall that restores Steam | 🟡 in progress: WovenGames.app (Status + Games pages), per-game settings, known-good settings database (`compat/`), Update Hook. Still to do: enabling WovenGames for a game from the app, onboarding for the App Management permission |
 | M5 | **Distribution**: CI builds the runner and app and publishes Releases, so users never compile; Steam-build tracking | download, open, play |
 
+**M5 decisions (2026-10-10):** release builds run on GitHub Actions' Apple Silicon runners, once the repo is public, so the minutes are free. Releases do **not** contain D3DMetal: the app downloads Gcenx's hash-pinned GPTK repack on first run, so we never redistribute Apple's files. Builds are ad-hoc signed for now (no Developer ID): users right-click → Open on first launch.
+
 ### Tested games
 
 | Game | Engine / API | Result |
