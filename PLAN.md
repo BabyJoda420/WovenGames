@@ -86,7 +86,7 @@ woven steam pin|unpin             # writes or removes steam.cfg
 | Game | Engine / API | Result |
 |---|---|---|
 | Billie's Wheelie (3180310) | Unity 2022.3, D3D11 | ✅ smooth on DXMT (after the Unity detection fix; wined3d was broken) |
-| Life is Strange: Double Exposure (1874000) | UE5, D3D12 | 🟡 D3D12/D3DMetal hangs in the menu. `-dx11` on DXMT: menus slow and glitchy, gameplay ~45 fps with a few hitches (`compat/1874000.env`) |
+| Life is Strange: Double Exposure (1874000) | UE5, D3D12 | 🟡 D3D12/D3DMetal hangs in the menu. `-dx11` on DXMT: gameplay ~45 fps with a few hitches. Menu: exclusive fullscreen at native 2560×1664 lands in the top-left corner without Retina mode (`WOVEN_RETINA=1` fixes it); the title scene is GPU-bound at ~337 ms/frame at native resolution (`compat/1874000.env`) |
 
 ### Notes for M4 (from M3 testing)
 
