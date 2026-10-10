@@ -17,6 +17,7 @@ wined3d, picked per game.
 |---|---|
 | `engine/` | builds the Wine runner (deps, patched Wine, Steam bridge, graphics backends) |
 | `notproton/` | Steam hook dylib, lsteamclient bridge, steam.exe shim, setup app (to be renamed) |
+| `cli/` | `woven`, the command-line tool (Swift): doctor, runners, prefixes, backend detection, run |
 
 ## Building the engine
 
@@ -26,6 +27,16 @@ engine/scripts/build-all.sh
 ```
 
 This needs about 15 GB of disk. The result is a runner in `engine/dist/runners/<id>`.
+
+## The `woven` tool
+
+```sh
+cd cli && swift build -c release      # needs Xcode (or Command Line Tools with a macOS 14+ SDK)
+.build/release/woven doctor            # is this Mac ready?
+.build/release/woven runner install    # install the newest engine build
+.build/release/woven backend detect /path/to/Game.exe
+.build/release/woven run /path/to/Game.exe
+```
 
 ## License
 

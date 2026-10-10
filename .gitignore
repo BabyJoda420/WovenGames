@@ -5,3 +5,6 @@
 /engine/downloads
 /engine/sources
 /engine/src
+# Swift build output
+/cli/.build/
+/cli/.swiftpm/

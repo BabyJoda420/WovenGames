@@ -1,0 +1,77 @@
+// `woven doctor`: is this Mac ready to play?
+
+import Foundation
+
+public struct Check: Sendable {
+    public enum Level: String, Sendable { case ok, info, warn, fail }
+    public var level: Level
+    public var title: String
+    public var detail: String
+}
+
+public enum Doctor {
+    public static func run(paths: Paths = Paths()) -> [Check] {
+        var checks: [Check] = []
+        func add(_ level: Check.Level, _ title: String, _ detail: String) {
+            checks.append(Check(level: level, title: title, detail: detail))
+        }
+
+        // Hardware and OS
+        let arm = Shell.capture("/usr/sbin/sysctl", ["-n", "hw.optional.arm64"]).output.trimmingCharacters(in: .whitespacesAndNewlines) == "1"
+        add(arm ? .ok : .fail, "Apple Silicon", arm ? "arm64" : "WovenGames needs an Apple Silicon Mac")
+
+        let os = ProcessInfo.processInfo.operatingSystemVersion
+        let osText = "macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)"
+        add(os.majorVersion >= 14 ? .ok : .fail, "macOS", os.majorVersion >= 14 ? osText : "\(osText); macOS 14 or later is required")
+
+        let rosetta = Shell.capture("/usr/bin/arch", ["-x86_64", "/usr/bin/true"]).status == 0
+        add(rosetta ? .ok : .fail, "Rosetta 2", rosetta ? "installed" : "missing: softwareupdate --install-rosetta")
+
+        if let free = try? paths.home.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+            .volumeAvailableCapacityForImportantUsage {
+            let gb = Double(free) / 1_000_000_000
+            add(gb >= 20 ? .ok : .warn, "Free disk space", String(format: "%.0f GB", gb) + (gb >= 20 ? "" : " (games need room)"))
+        }
+
+        // Runner
+        let store = RunnerStore(paths: paths)
+        if let runner = try? store.current() {
+            add(.ok, "Runner", "\(runner.id) (\(runner.manifest.wine ?? "?"))")
+            for backend in Backend.allCases where backend.rendererDir != nil {
+                add(runner.has(backend) ? .ok : .warn, "  \(backend.rawValue)", runner.has(backend) ? "present" : "missing from this runner")
+            }
+        } else {
+            let built = (try? FileManager.default.contentsOfDirectory(atPath: paths.engineDist.path(percentEncoded: false))) ?? []
+            add(.fail, "Runner", built.isEmpty
+                ? "none installed; build one with engine/scripts/build-all.sh"
+                : "none installed; built: \(built.joined(separator: ", ")); run `woven runner install`")
+        }
+
+        // Steam
+        let steam = SteamStatus(paths: paths.steam)
+        if !steam.installed {
+            add(.fail, "Steam", "not installed in /Applications")
+        } else {
+            add(.ok, "Steam", "client build \(steam.clientBuild ?? "unknown")\(steam.running ? ", running" : "")")
+            if let pending = steam.pendingBuild {
+                add(.info, "  Pending update", "build \(pending) is downloaded but not applied yet")
+            }
+            switch steam.injection {
+            case .none: add(.info, "  Steam Play hook", "not installed (M3: `woven steam patch`)")
+            case .wovenGames: add(.ok, "  Steam Play hook", "WovenGames")
+            case .notProton: add(.info, "  Steam Play hook", "NotProton is installed; WovenGames will take it over in M3")
+            case .other(let lib): add(.warn, "  Steam Play hook", "unknown library injected: \(lib)")
+            }
+            switch steam.pin {
+            case .full: add(.ok, "  Update pin", "BootStrapperInhibitAll (client updates blocked)")
+            case .onLaunchOnly: add(.warn, "  Update pin", "only BootStrapperInhibitUpdateOnLaunch; Steam can still update while running and break the hook")
+            case .none: add(.info, "  Update pin", "none")
+            }
+        }
+
+        if FileManager.default.fileExists(atPath: paths.notProtonSupport.path(percentEncoded: false)) {
+            add(.info, "NotProton data", paths.notProtonSupport.path(percentEncoded: false))
+        }
+        return checks
+    }
+}
