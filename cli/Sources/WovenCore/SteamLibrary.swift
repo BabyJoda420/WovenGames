@@ -30,6 +30,10 @@ public struct SteamLibrary: Sendable {
 
     public init(paths: Paths = Paths()) { self.paths = paths }
 
+    /// Steam installs these like games, but they only hold installers other games use
+    /// (228980: Steamworks Common Redistributables, full of Windows .exe files).
+    static let notGames: Set<String> = ["228980"]
+
     /// Every library folder Steam knows (libraryfolders.vdf), the default one first.
     public func folders() -> [URL] {
         var out = [paths.steam.userData]
@@ -58,7 +62,8 @@ public struct SteamLibrary: Sendable {
                       let state = VDF.parse(text)["AppState"],
                       let appID = state["appid"]?.string,
                       let name = state["name"]?.string,
-                      let dir = state["installdir"]?.string
+                      let dir = state["installdir"]?.string,
+                      !Self.notGames.contains(appID)
                 else { continue }
                 let installDir = steamapps.appending(path: "common/\(dir)")
                 let compatData = steamapps.appending(path: "compatdata/\(appID)")

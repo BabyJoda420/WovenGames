@@ -11,6 +11,8 @@ final class AppModel {
     var checks: [Check] = []
     var steam: SteamStatus?
     var games: [InstalledGame] = []
+    /// bumped on every refresh, so views can re-read things (launch logs) that change while games stay the same
+    var generation = 0
     var runner: Runner?
     /// a built engine waiting to be installed (Library/Caches/WovenGames/engine)
     var engineBuilt = false
@@ -45,6 +47,7 @@ final class AppModel {
              !SteamPatcher(paths: paths).deployedHookIsCurrent)
         }.value
         (checks, steam, games, runner, engineBuilt, hookOutdated) = snapshot
+        generation += 1
         builds = SteamBuilds.localReport(paths: paths)
         builds = await SteamBuilds.fullReport(paths: paths)
     }

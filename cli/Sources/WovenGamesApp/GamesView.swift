@@ -4,13 +4,15 @@ import WovenCore
 struct GamesView: View {
     @Environment(AppModel.self) private var model
     @State private var selection: InstalledGame.ID?
+    /// read once per games refresh: reading every launch log on each redraw is slow with many games
+    @State private var lastRuns: [InstalledGame.ID: LastRun] = [:]
 
     var body: some View {
         HSplitView {
             List(model.games, selection: $selection) { game in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(game.name)
-                    Text(SteamLibrary.lastRun(of: game)?.backend.map { "last run: \($0)" } ?? "not played yet")
+                    Text(lastRuns[game.id]?.backend.map { "last run: \($0)" } ?? "not played yet")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 2)
@@ -35,6 +37,12 @@ struct GamesView: View {
         }
         .navigationTitle("Games")
         .onAppear { if selection == nil { selection = model.games.first?.id } }
+        .task(id: model.generation) {
+            let games = model.games
+            lastRuns = await Task.detached {
+                Dictionary(uniqueKeysWithValues: games.compactMap { g in SteamLibrary.lastRun(of: g).map { (g.id, $0) } })
+            }.value
+        }
         .onChange(of: model.games) { _, games in
             if selection == nil || !games.contains(where: { $0.id == selection }) { selection = games.first?.id }
         }
@@ -45,6 +53,8 @@ struct GameDetailView: View {
     @Environment(AppModel.self) private var model
     let game: InstalledGame
     @State private var settings = GameSettings()
+    /// what the file holds; nil until loaded, so loading does not count as a change
+    @State private var saved: GameSettings?
     @State private var detected: BackendDetection?
     @State private var recommended: GameSettings?
     @State private var lastRun: LastRun?
@@ -115,15 +125,19 @@ struct GameDetailView: View {
         }
         .formStyle(.grouped)
         .task {
-            settings = GameSettings.load(appID: game.appID)
+            let loaded = GameSettings.load(appID: game.appID)
+            saved = loaded
+            settings = loaded
             recommended = GameSettings.recommended(appID: game.appID)
             lastRun = SteamLibrary.lastRun(of: game)
             let dir = game.installDir
             detected = await Task.detached { BackendDetector.detect(launchTarget: nil, installDir: dir) }.value
         }
         .onChange(of: settings) { _, new in
+            guard let saved, new != saved else { return }
             do {
                 try new.save(appID: game.appID)
+                self.saved = new
                 saveError = nil
             } catch {
                 saveError = "Could not save: \(error.localizedDescription)"

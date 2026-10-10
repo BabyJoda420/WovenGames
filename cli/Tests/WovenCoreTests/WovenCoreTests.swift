@@ -365,6 +365,28 @@ final class LibraryTests: XCTestCase {
         XCTAssertNil(run?.problem)
     }
 
+    func testRedistributablesAreNotAGame() throws {
+        let home = FileManager.default.temporaryDirectory.appending(path: "woven-lib-\(UUID().uuidString.prefix(8))")
+        defer { try? FileManager.default.removeItem(at: home) }
+        let paths = Paths(home: home)
+        let steamapps = paths.steam.userData.appending(path: "steamapps")
+        for (id, name, dir) in [("228980", "Steamworks Common Redistributables", "Steamworks Shared"),
+                                ("1874000", "Life is Strange: Double Exposure", "Double Exposure")] {
+            let game = steamapps.appending(path: "common/\(dir)/bin")
+            try FileManager.default.createDirectory(at: game, withIntermediateDirectories: true)
+            try Data().write(to: game.appending(path: "setup.exe"))
+            try """
+            "AppState"
+            {
+            \t"appid"\t\t"\(id)"
+            \t"name"\t\t"\(name)"
+            \t"installdir"\t\t"\(dir)"
+            }
+            """.write(to: steamapps.appending(path: "appmanifest_\(id).acf"), atomically: true, encoding: .utf8)
+        }
+        XCTAssertEqual(SteamLibrary(paths: paths).windowsGames().map(\.appID), ["1874000"])
+    }
+
     func testRealLibraryListsWindowsGames() {
         // smoke test against this Mac's Steam library, if there is one
         let games = SteamLibrary().windowsGames()
