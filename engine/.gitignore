@@ -1,8 +1,8 @@
-# fetched or generated, never committed
-/build/
-/dist/
-/downloads/
-/sources/
-/src/
+# fetched or generated, never committed (may be symlinks into ~/Library/Caches/WovenGames)
+/build
+/dist
+/downloads
+/sources
+/src
 /tests/*.exe
 .DS_Store

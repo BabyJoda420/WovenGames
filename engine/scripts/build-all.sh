@@ -8,6 +8,24 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ID="${1:-selfbuilt-cx26.3-r1}"
+
+# WovenGames: autoconf and Wine's build break on paths with spaces. In that case keep the
+# bulky work dirs in a space-free cache (outside the repo), and re-run through a space-free
+# symlink to the engine dir so every script below sees a ROOT without spaces.
+WORKROOT="${WOVEN_BUILD_ROOT:-$HOME/Library/Caches/WovenGames/engine}"
+if [[ "$ROOT" == *" "* ]]; then
+    [[ "$WORKROOT" != *" "* ]] || { echo "WOVEN_BUILD_ROOT must not contain spaces" >&2; exit 1; }
+    for d in build dist downloads sources src; do
+        mkdir -p "$WORKROOT/$d"
+        if [ ! -L "$ROOT/$d" ]; then
+            [ ! -e "$ROOT/$d" ] || { echo "$ROOT/$d exists; move it into $WORKROOT/$d" >&2; exit 1; }
+            ln -s "$WORKROOT/$d" "$ROOT/$d"
+        fi
+    done
+    ln -sfn "$ROOT" "$WORKROOT/root"
+    exec "$WORKROOT/root/scripts/build-all.sh" "$@"
+fi
+
 LOGS="$ROOT/build/logs"
 mkdir -p "$LOGS"
 

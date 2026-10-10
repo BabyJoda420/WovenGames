@@ -1,7 +1,7 @@
 .DS_Store
 # engine build products (also covered by engine/.gitignore)
-/engine/build/
-/engine/dist/
-/engine/downloads/
-/engine/sources/
-/engine/src/
+/engine/build
+/engine/dist
+/engine/downloads
+/engine/sources
+/engine/src
