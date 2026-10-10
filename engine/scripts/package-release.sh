@@ -45,7 +45,7 @@ for f in pe-d3d syshud; do cp "$ROOT/build/helpers/$f" "$STAGE/support/$f"; done
 sed -n 's/.*_VERSION[^"]*"\([^"]*\)".*/\1/p' "$NP/dylib/version.h" | head -1 > "$STAGE/support/dylib.version"
 mkdir -p "$STAGE/signatures" "$STAGE/compat"
 cp "$NP"/signatures/macos.arm64/*.json "$STAGE/signatures/"
-cp "$REPO"/compat/*.env "$STAGE/compat/" 2>/dev/null || true
+cp "$REPO"/compat/*.env "$REPO"/compat/*.json "$STAGE/compat/" 2>/dev/null || true
 cp "$NP/app/Sources/NotProtonApp/Resources/valve-packages.manifest" "$STAGE/valve-packages.manifest"
 
 cat > "$STAGE/release.json" <<EOF

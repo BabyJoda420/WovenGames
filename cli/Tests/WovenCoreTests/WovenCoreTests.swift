@@ -417,3 +417,42 @@ final class ReleaseTests: XCTestCase {
         XCTAssertEqual(ReleaseInstaller.sha256(of: f), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
     }
 }
+
+final class SteamBuildsTests: XCTestCase {
+    let log = """
+    2026-10-10 18:07:10 [wovengames] info np_init: loaded into steam_osx (pid 100) version 1.0.3
+    2026-10-10 18:07:19 [wovengames] info install_thread: signatures 15/15 resolved
+    2026-10-10 18:07:19 [wovengames] info hooks: 8/8 installed
+    2026-10-10 18:48:27 [wovengames] info np_init: loaded into steam_osx (pid 200) version 1.0.3
+    2026-10-10 18:48:27 [wovengames] info np_init: loaded into steam_osx (pid 200) version 1.0.3
+    2026-10-10 18:48:29 [wovengames] info install_thread: signatures 14/15 resolved
+    2026-10-10 18:48:29 [wovengames] info hooks: 7/8 installed
+    2026-10-10 18:48:29 [wovengames] info install_thread: steamui.dylib signatures 2/2 resolved
+    2026-10-10 18:48:29 [wovengames] info hooks: steamui 2/2 installed
+    """
+
+    func testLastSessionAndHealth() throws {
+        let s = try XCTUnwrap(HookSession.last(inLog: log))
+        XCTAssertEqual(s.signatures, .init(done: 14, total: 15))
+        XCTAssertEqual(s.hooks, .init(done: 7, total: 8))
+        XCTAssertEqual(s.uiHooks, .init(done: 2, total: 2))
+        XCTAssertFalse(s.healthy)
+        let healthy = try XCTUnwrap(HookSession.last(inLog: log.replacingOccurrences(of: "14/15", with: "15/15").replacingOccurrences(of: "7/8", with: "8/8")))
+        XCTAssertTrue(healthy.healthy)
+        XCTAssertNotNil(healthy.started)
+    }
+
+    func testVerdicts() throws {
+        let db = try JSONDecoder().decode(CheckedBuilds.self, from: Data(contentsOf:
+            URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../../compat/steam-builds.json").standardizedFileURL))
+        var r = SteamBuildReport(installed: "1788652215", pending: "1791592380", session: HookSession.last(inLog: log),
+                                 sessionOnInstalled: true, checked: db)
+        if case .broken = r.verdict(for: "1788652215") {} else { XCTFail("a failing live session wins") }
+        XCTAssertEqual(r.verdict(for: "1791592380"), .checkedOffline)
+        XCTAssertEqual(r.verdict(for: "1"), .unchecked)
+        r.sessionOnInstalled = false
+        XCTAssertEqual(r.verdict(for: "1788652215"), .working) // live: true in the database
+        r.checked.builds.append(CheckedBuild(build: 2, channel: "public", resolved: 15, unresolved: 2, checked: "x"))
+        XCTAssertEqual(r.verdict(for: "2"), .failsOffline(2))
+    }
+}

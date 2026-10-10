@@ -296,8 +296,34 @@ extension Woven {
         static let configuration = CommandConfiguration(
             commandName: "steam",
             abstract: "macOS Steam integration.",
-            subcommands: [Status.self, Patch.self, Unpatch.self, Pin.self, Unpin.self, Log.self]
+            subcommands: [Status.self, Builds.self, Patch.self, Unpatch.self, Pin.self, Unpin.self, Log.self]
         )
+
+        struct Builds: AsyncParsableCommand {
+            static let configuration = CommandConfiguration(
+                abstract: "Show whether the hook supports the installed, pending and newest Steam builds."
+            )
+            @Flag(help: "Only what is on this Mac (no Valve or GitHub lookups).") var offline = false
+
+            func run() async throws {
+                let r = offline ? SteamBuilds.localReport() : await SteamBuilds.fullReport()
+                func row(_ title: String, _ build: String?) {
+                    guard let build else { return }
+                    print("\(title.padding(toLength: 16, withPad: " ", startingAt: 0)) \(build)  \(r.verdict(for: build).label)")
+                }
+                row("installed", r.installed)
+                row("pending update", r.pending)
+                row("newest public", r.latestPublic)
+                row("newest beta", r.latestBeta)
+                if let s = r.session {
+                    let f = { (c: HookSession.Count?) in c.map { "\($0.done)/\($0.total)" } ?? "-" }
+                    print("last Steam start: signatures \(f(s.signatures)), hooks \(f(s.hooks)), Steam UI signatures \(f(s.uiSignatures)), Steam UI hooks \(f(s.uiHooks))\(r.sessionOnInstalled ? "" : " (on an earlier build)")")
+                }
+                if let newest = r.latestPublic, newest != r.installed, r.verdict(for: newest).isSafe {
+                    print("\nSteam \(newest) is checked: `woven steam unpin`, start Steam to update, then `woven steam pin`.")
+                }
+            }
+        }
 
         struct Patch: ParsableCommand {
             static let configuration = CommandConfiguration(

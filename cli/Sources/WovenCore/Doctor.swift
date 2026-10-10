@@ -53,8 +53,18 @@ public enum Doctor {
             add(.fail, "Steam", "not installed in /Applications")
         } else {
             add(.ok, "Steam", "client build \(steam.clientBuild ?? "unknown")\(steam.running ? ", running" : "")")
+            let builds = SteamBuilds.localReport(paths: paths)
+            switch builds.verdict(for: steam.clientBuild) {
+            case .working: add(.ok, "  Build support", "the hook works on this build")
+            case .checkedOffline: add(.ok, "  Build support", "checked offline; start Steam once to confirm")
+            case .broken(let why): add(.fail, "  Build support", "the hook failed on this build (\(why)); `woven steam unpatch` or wait for an update")
+            case .failsOffline(let n): add(.fail, "  Build support", "this build is not supported (\(n) signatures missing)")
+            case .unchecked: add(.warn, "  Build support", "this build has not been checked; start Steam once, then run `woven steam builds`")
+            }
             if let pending = steam.pendingBuild {
-                add(.info, "  Pending update", "build \(pending) is downloaded but not applied yet")
+                let v = builds.verdict(for: pending)
+                add(v.isSafe ? .info : .warn, "  Pending update",
+                    "build \(pending) is downloaded but not applied (\(v.label))\(v.isSafe ? "" : "; keep Steam pinned")")
             }
             switch steam.injection {
             case .none: add(.info, "  Steam Play hook", "not installed (`woven setup`, then `woven steam patch`)")

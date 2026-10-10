@@ -55,6 +55,14 @@ public struct SteamStatus: Sendable {
         return (installed, pending == installed ? nil : pending)
     }
 
+    /// When the installed build's manifest was written, i.e. when that build was installed.
+    public static func installedManifestDate(packageDir: URL) -> Date? {
+        ((try? FileManager.default.contentsOfDirectory(at: packageDir, includingPropertiesForKeys: [.contentModificationDateKey])) ?? [])
+            .filter { $0.pathExtension == "manifest" }
+            .compactMap { try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate }
+            .max()
+    }
+
     static func manifestVersion(_ text: String) -> String? {
         let pattern = try! Regex(#""version"\s+"(\d+)""#)
         guard let match = text.firstMatch(of: pattern), let build = match.output[1].substring else { return nil }

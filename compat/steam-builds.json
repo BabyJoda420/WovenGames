@@ -1,0 +1,24 @@
+{
+  "about": "macOS Steam client builds checked against the WovenGames hook. offline = engine/scripts/check-steam-build.sh resolved the hook's signatures against Valve's published build; live = the hook ran in that build and games played.",
+  "builds": [
+    {
+      "build": 1788652215,
+      "channel": "public",
+      "signatures": "1790904859",
+      "resolved": 17,
+      "unresolved": 0,
+      "checked": "2026-10-10",
+      "live": true,
+      "note": "Billie's Wheelie and Life is Strange: Double Exposure played"
+    },
+    {
+      "build": 1791592380,
+      "channel": "publicbeta",
+      "signatures": "1790904859",
+      "resolved": 17,
+      "unresolved": 0,
+      "checked": "2026-10-10",
+      "live": false
+    }
+  ]
+}

@@ -29,6 +29,15 @@ woven install --latest      # engine + D3DMetal + Valve's Steam DLLs, each hash-
 woven steam patch
 ```
 
+## Steam updates
+
+The hook finds its functions inside one Steam build, so WovenGames keeps Steam on a checked build.
+`woven steam builds` (or the app's Status page) shows whether the installed build, a downloaded
+update and Valve's newest public and beta builds are supported. `engine/scripts/check-steam-build.sh
+[public|publicbeta]` checks a build offline by resolving the hook's signatures against Valve's
+published files. Once the repo is public, the `steam-watch` workflow does this daily and records
+results in `compat/steam-builds.json`.
+
 ## Making a release
 
 Push a tag such as `v0.1.0`. `.github/workflows/release.yml` builds the engine and the app on

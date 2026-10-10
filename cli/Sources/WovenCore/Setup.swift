@@ -132,8 +132,10 @@ public struct Setup: Sendable {
         let compat = paths.support.appending(path: "compat")
         try fm.createDirectory(at: compat, withIntermediateDirectories: true)
         let entries = files(in: payload.compat, suffix: ".env")
-        for name in entries { try place(payload.compat.appending(path: name), compat.appending(path: name)) }
-        log("compat database: \(entries.count) game(s)")
+        for name in entries + files(in: payload.compat, suffix: ".json") {
+            try place(payload.compat.appending(path: name), compat.appending(path: name))
+        }
+        log("compat database: \(entries.count) game(s), \(CheckedBuilds.load(from: compat.appending(path: "steam-builds.json"))?.builds.count ?? 0) checked Steam build(s)")
     }
 
     func files(in dir: URL, suffix: String) -> [String] {

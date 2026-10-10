@@ -1,0 +1,77 @@
+# Daily: checks Valve's newest public and beta macOS Steam builds against the hook's
+# signatures (engine/scripts/check-steam-build.sh, no Steam needed) and opens a pull request
+# that records every new build in compat/steam-builds.json. Merged, the result reaches every
+# WovenGames app right away (the app reads that file from GitHub).
+name: Steam watch
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check:
+    # Off while the repository is private (macOS minutes are billed at a 10x rate there).
+    if: ${{ !github.event.repository.private }}
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the newest Steam builds
+        id: check
+        run: |
+          : > results.jsonl
+          for channel in public publicbeta; do
+            engine/scripts/check-steam-build.sh "$channel" | tail -1 | grep '^{' >> results.jsonl || true
+          done
+          cat results.jsonl
+
+      - name: Record new builds
+        id: record
+        run: |
+          python3 - <<'EOF'
+          import json, os
+          path = "compat/steam-builds.json"
+          db = json.load(open(path))
+          known = {b["build"] for b in db["builds"]}
+          new = []
+          for line in open("results.jsonl"):
+              r = json.loads(line)
+              if r["build"] in known:
+                  continue
+              entry = {k: r[k] for k in ("build", "channel", "signatures", "resolved", "unresolved", "checked")}
+              entry["live"] = False
+              db["builds"].append(entry)
+              known.add(r["build"])
+              new.append(r)
+          json.dump(db, open(path, "w"), indent=2)
+          open(path, "a").write("\n")
+          lines = [f"- Steam {r['channel']} build {r['build']}: {r['resolved']} signatures resolved, "
+                   f"{r['unresolved']} unresolved ({'checked' if r['verified'] else '**NOT SUPPORTED**'})" for r in new]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"count={len(new)}\n")
+              out.write("broken=%d\n" % sum(1 for r in new if not r["verified"]))
+          open("summary.md", "w").write("\n".join(lines) + "\n")
+          EOF
+          cat summary.md
+
+      - name: Open a pull request
+        if: ${{ steps.record.outputs.count != '0' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="steam-watch/$(date -u +%Y%m%d)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add compat/steam-builds.json
+          git commit -m "steam-builds: record new Steam builds" -m "$(cat summary.md)"
+          git push -u origin "$branch"
+          title="New Steam builds checked"
+          [ "${{ steps.record.outputs.broken }}" != "0" ] && title="New Steam build breaks the hook"
+          gh pr create --title "$title" --body "$(printf 'Found by the daily Steam watch.\n\n%s\n\nUnresolved signatures mean the hook needs new signatures before users update Steam.\n' "$(cat summary.md)")"

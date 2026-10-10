@@ -16,6 +16,8 @@ final class AppModel {
     var engineBuilt = false
     /// Steam.app carries an older hook than the installed one
     var hookOutdated = false
+    /// Steam build support, with Valve's newest builds (loaded after the rest)
+    var builds: SteamBuildReport?
     var busy: String?
     /// lines from the last action, shown under the status checks
     var activity: [String] = []
@@ -39,6 +41,8 @@ final class AppModel {
              !SteamPatcher(paths: paths).deployedHookIsCurrent)
         }.value
         (checks, steam, games, runner, engineBuilt, hookOutdated) = snapshot
+        builds = SteamBuilds.localReport(paths: paths)
+        builds = await SteamBuilds.fullReport(paths: paths)
     }
 
     // MARK: actions (each runs off the main thread, then refreshes)

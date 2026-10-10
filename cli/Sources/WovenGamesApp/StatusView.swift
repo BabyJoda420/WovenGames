@@ -59,6 +59,19 @@ struct StatusView: View {
                 }
             }
 
+            if let builds = model.builds, model.steam?.installed == true {
+                Section {
+                    buildRow("Installed", builds.installed, builds)
+                    if let pending = builds.pending { buildRow("Downloaded update", pending, builds) }
+                    if builds.latestPublic != builds.installed { buildRow("Newest from Valve", builds.latestPublic, builds) }
+                    if let beta = builds.latestBeta { buildRow("Newest beta", beta, builds) }
+                } header: {
+                    Text("Steam builds")
+                } footer: {
+                    Text(buildAdvice(builds)).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
             Section("Checks") {
                 ForEach(Array(model.checks.enumerated()), id: \.offset) { _, check in
                     CheckRow(check: check)
@@ -73,6 +86,31 @@ struct StatusView: View {
         } message: {
             Text("Removes the WovenGames hook from Steam.app and puts its original settings back. Windows games stop showing Install and Play until you patch again. Steam is quit if it is running.")
         }
+    }
+
+    @ViewBuilder private func buildRow(_ title: String, _ build: String?, _ report: SteamBuildReport) -> some View {
+        if let build {
+            let verdict = report.verdict(for: build)
+            HStack {
+                Image(systemName: verdict.isSafe ? "checkmark.circle.fill" : (verdict == .unchecked ? "questionmark.circle" : "xmark.octagon.fill"))
+                    .foregroundStyle(verdict.isSafe ? .green : (verdict == .unchecked ? .orange : .red))
+                Text(title)
+                Spacer()
+                Text("\(build) · \(verdict.label)").foregroundStyle(.secondary).textSelection(.enabled)
+            }
+        }
+    }
+
+    private func buildAdvice(_ r: SteamBuildReport) -> String {
+        if case .broken = r.verdict(for: r.installed) {
+            return "The hook does not work on the installed Steam build. Restore Steam, or wait for a WovenGames update that supports it."
+        }
+        if let newest = r.latestPublic, newest != r.installed {
+            return r.verdict(for: newest).isSafe
+                ? "Steam \(newest) is checked. To update: turn off \"Keep Steam on this build\", restart Steam, then turn it back on."
+                : "Keep Steam on this build: WovenGames has not checked Steam \(newest) yet."
+        }
+        return "You are on Valve's newest Steam build."
     }
 
     private var steamDetail: String {
