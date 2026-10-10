@@ -1,11 +1,15 @@
-// `woven setup`: lays the engine build out in ~/Library/Application Support/WovenGames the way
-// the Steam hook (wovengames.dylib) and its compat tool run script expect it:
+// Installing the engine into ~/Library/Application Support/WovenGames, laid out the way the
+// Steam hook (wovengames.dylib) and its compat tool run script expect it:
 //
 //   runners/<id>, runners/current                    the Wine runner
 //   bridge/                                          Valve's Windows Steam DLLs, lsteamclient, steam.exe shim
 //   signatures/macos.arm64/*.json                    where the hook finds its functions in Steam
+//   compat/<appid>.env                               known-good per-game settings
 //   wovengames.dylib, overlay-shim.dylib,            the hook and its helpers
 //   iconmaker, appinfo, pe-d3d, syshud, dylib.version
+//
+// The files come from a Payload: either a local engine build (`woven setup`) or an unpacked
+// release plus what ReleaseInstaller downloads on this Mac (`woven install`).
 
 import Foundation
 
@@ -19,6 +23,21 @@ public enum SetupError: Error, CustomStringConvertible {
     }
 }
 
+/// Where each part of the engine comes from.
+public struct Payload: Sendable {
+    public var runner: URL
+    public var hook: URL
+    /// overlay-shim.dylib, iconmaker, appinfo, pe-d3d, syshud
+    public var helpers: [String: URL]
+    public var signatures: URL
+    public var compat: URL
+    /// steamclient(64).dll, tier0_s64.dll, vstdlib_s64.dll, legacycompat/
+    public var valveBridge: URL
+    public var hookVersion: String
+    /// how to get a missing file, for error messages
+    public var hint: String
+}
+
 public struct EngineBuild: Sendable {
     /// engine/ (build-all.sh leaves a space-free symlink to it in the cache)
     public var root: URL
@@ -29,37 +48,49 @@ public struct EngineBuild: Sendable {
         EngineBuild(root: paths.home.appending(path: "Library/Caches/WovenGames/engine/root"))
     }
 
-    var bridge: URL { root.appending(path: "build/bridge") }
-    var helpers: URL { root.appending(path: "build/helpers") }
-    var notProtonOut: URL { root.appending(path: "notproton/out") }
-    var signatures: URL { root.appending(path: "notproton/signatures/macos.arm64") }
-    var versionHeader: URL { root.appending(path: "notproton/dylib/version.h") }
     var dist: URL { root.appending(path: "dist/runners") }
-    /// the repo's compat/ next to engine/ (resolve the cache symlink first, so ".." is the repo)
-    var compatDatabase: URL { root.resolvingSymlinksInPath().deletingLastPathComponent().appending(path: "compat") }
+
+    public func payload(runnerID: String = "selfbuilt-cx26.3-r1") -> Payload {
+        let out = root.appending(path: "notproton/out")
+        let helpers = root.appending(path: "build/helpers")
+        let header = (try? String(contentsOf: root.appending(path: "notproton/dylib/version.h"), encoding: .utf8)) ?? ""
+        return Payload(
+            runner: dist.appending(path: runnerID),
+            hook: out.appending(path: "notproton.dylib"),
+            helpers: ["overlay-shim.dylib": out.appending(path: "overlay-shim.dylib"),
+                      "iconmaker": out.appending(path: "iconmaker"),
+                      "appinfo": out.appending(path: "appinfo"),
+                      "pe-d3d": helpers.appending(path: "pe-d3d"),
+                      "syshud": helpers.appending(path: "syshud")],
+            signatures: root.appending(path: "notproton/signatures/macos.arm64"),
+            // the repo's compat/ next to engine/ (resolve the cache symlink first, so ".." is the repo)
+            compat: root.resolvingSymlinksInPath().deletingLastPathComponent().appending(path: "compat"),
+            valveBridge: root.appending(path: "build/bridge"),
+            hookVersion: header.firstMatch(of: try! Regex(#"VERSION\s+"([^"]+)""#))?.output[1].substring.map(String.init) ?? "unknown",
+            hint: "engine/scripts/build-all.sh")
+    }
 }
 
 public struct Setup: Sendable {
     public var paths: Paths
-    public var engine: EngineBuild
+    public var payload: Payload
 
-    public init(paths: Paths = Paths(), engine: EngineBuild? = nil) {
+    public init(paths: Paths = Paths(), payload: Payload? = nil) {
         self.paths = paths
-        self.engine = engine ?? EngineBuild.locate(paths: paths)
+        self.payload = payload ?? EngineBuild.locate(paths: paths).payload()
     }
 
     public var dylib: URL { paths.support.appending(path: "wovengames.dylib") }
     public var bridge: URL { paths.support.appending(path: "bridge") }
 
     /// Installs everything; `log` gets one line per step.
-    public func run(runnerID: String = "selfbuilt-cx26.3-r1", log: (String) -> Void = { _ in }) throws {
+    public func run(log: (String) -> Void = { _ in }) throws {
         let fm = FileManager.default
-        let runnerSource = engine.dist.appending(path: runnerID)
-        try require(runnerSource.appending(path: "runner.json"), "runner \(runnerID)", "engine/scripts/build-all.sh")
-        try require(engine.notProtonOut.appending(path: "notproton.dylib"), "the Steam hook", "engine/scripts/build-all.sh")
-        try require(engine.bridge.appending(path: "steamclient64.dll"), "Valve's bridge DLLs", "engine/scripts/fetch-valve-bridge.sh")
+        try require(payload.runner.appending(path: "runner.json"), "the Wine runner")
+        try require(payload.hook, "the Steam hook")
+        try require(payload.valveBridge.appending(path: "steamclient64.dll"), "Valve's bridge DLLs")
 
-        let runner = try RunnerStore(paths: paths).install(from: runnerSource)
+        let runner = try RunnerStore(paths: paths).install(from: payload.runner)
         _ = Shell.capture("/usr/bin/xattr", ["-dr", "com.apple.quarantine", runner.root.path(percentEncoded: false)])
         log("runner: \(runner.id) (selected)")
 
@@ -67,9 +98,9 @@ public struct Setup: Sendable {
             try fm.createDirectory(at: bridge.appending(path: dir), withIntermediateDirectories: true)
         }
         for name in ["steamclient.dll", "steamclient64.dll", "tier0_s64.dll", "vstdlib_s64.dll"] {
-            try place(engine.bridge.appending(path: name), bridge.appending(path: name))
+            try place(payload.valveBridge.appending(path: name), bridge.appending(path: name))
         }
-        let legacy = engine.bridge.appending(path: "legacycompat")
+        let legacy = payload.valveBridge.appending(path: "legacycompat")
         for name in (try? fm.contentsOfDirectory(atPath: legacy.path(percentEncoded: false))) ?? [] {
             try place(legacy.appending(path: name), bridge.appending(path: "legacycompat/\(name)"))
         }
@@ -87,38 +118,38 @@ public struct Setup: Sendable {
 
         let sigs = paths.support.appending(path: "signatures/macos.arm64")
         try fm.createDirectory(at: sigs, withIntermediateDirectories: true)
-        let sigFiles = ((try? fm.contentsOfDirectory(atPath: engine.signatures.path(percentEncoded: false))) ?? []).filter { $0.hasSuffix(".json") }
-        for name in sigFiles { try place(engine.signatures.appending(path: name), sigs.appending(path: name)) }
-        log("signatures: \(sigFiles.sorted().joined(separator: ", "))")
+        let sigFiles = files(in: payload.signatures, suffix: ".json")
+        for name in sigFiles { try place(payload.signatures.appending(path: name), sigs.appending(path: name)) }
+        log("signatures: \(sigFiles.joined(separator: ", "))")
 
-        try place(engine.notProtonOut.appending(path: "overlay-shim.dylib"), paths.support.appending(path: "overlay-shim.dylib"))
-        try place(engine.notProtonOut.appending(path: "iconmaker"), paths.support.appending(path: "iconmaker"))
-        try place(engine.notProtonOut.appending(path: "appinfo"), paths.support.appending(path: "appinfo"))
-        try place(engine.helpers.appending(path: "pe-d3d"), paths.support.appending(path: "pe-d3d"))
-        try place(engine.helpers.appending(path: "syshud"), paths.support.appending(path: "syshud"))
-        try place(engine.notProtonOut.appending(path: "notproton.dylib"), dylib)
-        let version = (try? String(contentsOf: engine.versionHeader, encoding: .utf8))
-            .flatMap { $0.firstMatch(of: try! Regex(#"VERSION\s+"([^"]+)""#))?.output[1].substring }
-            .map(String.init) ?? "unknown"
-        try (version + "\n").write(to: paths.support.appending(path: "dylib.version"), atomically: true, encoding: .utf8)
-        log("hook \(version) and helpers: \(paths.support.path(percentEncoded: false))")
+        for (name, source) in payload.helpers.sorted(by: { $0.key < $1.key }) {
+            try place(source, paths.support.appending(path: name))
+        }
+        try place(payload.hook, dylib)
+        try (payload.hookVersion + "\n").write(to: paths.support.appending(path: "dylib.version"), atomically: true, encoding: .utf8)
+        log("hook \(payload.hookVersion) and helpers: \(paths.support.path(percentEncoded: false))")
 
         let compat = paths.support.appending(path: "compat")
         try fm.createDirectory(at: compat, withIntermediateDirectories: true)
-        let entries = ((try? fm.contentsOfDirectory(atPath: engine.compatDatabase.path(percentEncoded: false))) ?? []).filter { $0.hasSuffix(".env") }
-        for name in entries { try place(engine.compatDatabase.appending(path: name), compat.appending(path: name)) }
+        let entries = files(in: payload.compat, suffix: ".env")
+        for name in entries { try place(payload.compat.appending(path: name), compat.appending(path: name)) }
         log("compat database: \(entries.count) game(s)")
     }
 
-    func require(_ url: URL, _ what: String, _ hint: String) throws {
+    func files(in dir: URL, suffix: String) -> [String] {
+        ((try? FileManager.default.contentsOfDirectory(atPath: dir.path(percentEncoded: false))) ?? [])
+            .filter { $0.hasSuffix(suffix) }.sorted()
+    }
+
+    func require(_ url: URL, _ what: String) throws {
         guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
-            throw SetupError.missing(what, hint: hint)
+            throw SetupError.missing(what, hint: payload.hint)
         }
     }
 
     /// Copies via a temporary name, so a running reader never sees half a file.
     func place(_ source: URL, _ dest: URL) throws {
-        try require(source, source.lastPathComponent, "engine/scripts/build-all.sh")
+        try require(source, source.lastPathComponent)
         let fm = FileManager.default
         try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
         let tmp = dest.appendingPathExtension("new")

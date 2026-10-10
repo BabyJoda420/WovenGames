@@ -1,0 +1,102 @@
+# Builds the engine and the app on Apple Silicon and publishes a GitHub release.
+#
+#   git tag v0.1.0 && git push origin v0.1.0     -> release v0.1.0 with the engine archive and app
+#   Actions > Release > Run workflow              -> same build, uploaded as a workflow artifact only
+#
+# The release carries no Apple or Valve files: `woven install` / the app fetch D3DMetal and
+# Valve's Steam DLLs on the user's Mac (engine/scripts/package-release.sh checks this).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # Off while the repository is private: macOS minutes on private repos are billed at a
+    # 10x rate, and one engine build takes about an hour.
+    if: ${{ !github.event.repository.private }}
+    runs-on: macos-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME#v}"; else v="$(cat VERSION)-dev.${GITHUB_RUN_NUMBER}"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "WovenGames $v"
+
+      - name: Build tools
+        run: |
+          sudo softwareupdate --install-rosetta --agree-to-license || true
+          brew install mingw-w64 bison flex meson ninja ccache cmake pkgconf autoconf llvm lld nasm freetype
+          xcodebuild -version
+          arch -x86_64 /usr/bin/true
+
+      - name: Cache source downloads and ccache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/WovenGames/engine/downloads
+            ~/Library/Caches/WovenGames/engine/build/ccache
+          key: engine-${{ runner.os }}-${{ hashFiles('engine/scripts/*.sh', 'engine/patches/**', 'notproton/lsteamclient/**') }}
+          restore-keys: engine-${{ runner.os }}-
+
+      - name: Build the engine
+        run: engine/scripts/build-all.sh
+
+      - name: Unit tests
+        run: swift test --package-path cli
+
+      - name: Package the engine
+        run: engine/scripts/package-release.sh "${{ steps.version.outputs.version }}"
+
+      - name: Build the app
+        run: |
+          cli/scripts/build-app.sh
+          ditto -c -k --keepParent cli/.build/WovenGames.app "release/WovenGames-${{ steps.version.outputs.version }}.zip"
+          (cd release && shasum -a 256 "WovenGames-${{ steps.version.outputs.version }}.zip" > "WovenGames-${{ steps.version.outputs.version }}.zip.sha256")
+          ls -la release
+
+      - name: Upload build (manual runs)
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: wovengames-${{ steps.version.outputs.version }}
+          path: release/
+          retention-days: 14
+
+      - name: Publish the release
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          cat > release/NOTES.md <<EOF
+          ## Install
+
+          1. Download **WovenGames-$VERSION.zip**, unzip it, and move **WovenGames.app** to Applications.
+          2. The first time, right-click it and choose **Open**: the app is not notarized yet.
+          3. Click **Install** to download the engine. D3DMetal (Apple) and Valve's Steam DLLs are then
+             fetched on your Mac and checked against pinned hashes.
+          4. Click **Patch Steam** (macOS asks to allow App Management), then install and play Windows
+             games from macOS Steam.
+
+          Or from a terminal: \`woven install --latest && woven steam patch\` (the woven tool is in
+          WovenGames.app/Contents/Resources).
+
+          Requires an Apple Silicon Mac with macOS 14 or later and Rosetta 2. Games with kernel-level
+          anti-cheat do not run.
+          EOF
+          gh release create "$GITHUB_REF_NAME" release/*.tar.xz release/*.sha256 release/*.zip \
+            --title "WovenGames $VERSION" --notes-file release/NOTES.md

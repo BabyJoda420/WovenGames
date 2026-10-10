@@ -15,9 +15,8 @@ struct StatusView: View {
                 step(done: model.runner != nil,
                      title: "Engine",
                      detail: model.runner.map { "\($0.id) · \($0.manifest.wine ?? "")" }
-                        ?? (model.engineBuilt ? "Built, not installed yet" : "Not built yet: run engine/scripts/build-all.sh")) {
+                        ?? (model.engineBuilt ? "Built locally, not installed yet" : "Downloads the latest release (about 300 MB)")) {
                     Button(model.runner == nil ? "Install" : "Reinstall") { Task { await model.installEngine() } }
-                        .disabled(!model.engineBuilt)
                 }
                 step(done: model.steam?.injection == .wovenGames,
                      title: "Steam Play in macOS Steam",

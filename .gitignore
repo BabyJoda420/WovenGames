@@ -8,3 +8,5 @@
 # Swift build output
 /cli/.build/
 /cli/.swiftpm/
+# release archives (engine/scripts/package-release.sh)
+/release/

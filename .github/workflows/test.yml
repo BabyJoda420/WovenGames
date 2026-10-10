@@ -1,0 +1,32 @@
+# Unit tests and script checks on every push and pull request (no engine build).
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  swift:
+    # Off while the repository is private (macOS minutes are billed at a 10x rate there).
+    if: ${{ !github.event.repository.private }}
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift build --package-path cli
+      - run: swift test --package-path cli
+
+  scripts:
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell syntax
+        run: |
+          for f in engine/scripts/*.sh engine/tests/*.sh cli/scripts/*.sh; do bash -n "$f"; done
+          sh -n notproton/dylib/feats/compat_run.sh
+      - name: compat database
+        run: |
+          # every line is a comment, blank, or an allowed KEY=VALUE
+          ! grep -vhE '^(#.*|\s*|(CX_GRAPHICS|D3DM_|DXMT_|DXVK_|MTL_|NOTPROTON_|ROSETTA_|WINE|WOVEN_)[A-Z0-9_]*=.*)$' compat/*.env

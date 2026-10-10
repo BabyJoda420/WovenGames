@@ -43,8 +43,17 @@ final class AppModel {
 
     // MARK: actions (each runs off the main thread, then refreshes)
 
+    /// A local engine build wins (for developers); otherwise the newest GitHub release.
     func installEngine() async {
-        await perform("Installing the engine") { log in try Setup().run(log: log) }
+        if engineBuilt {
+            await perform("Installing the engine") { log in try Setup().run(log: log) }
+        } else {
+            await performAsync("Downloading and installing WovenGames") { log in
+                let url = try await ReleaseInstaller.latestReleaseAsset()
+                log("release: \(url.lastPathComponent)")
+                try await ReleaseInstaller().install(archive: url, log: log)
+            }
+        }
     }
 
     func patchSteam() async {
@@ -77,13 +86,17 @@ final class AppModel {
     }
 
     private func perform(_ title: String, _ work: @escaping @Sendable (@escaping @Sendable (String) -> Void) throws -> Void) async {
+        await performAsync(title) { log in try work(log) }
+    }
+
+    private func performAsync(_ title: String, _ work: @escaping @Sendable (@escaping @Sendable (String) -> Void) async throws -> Void) async {
         busy = title
         activity = []
         error = nil
         let stream = AsyncStream<String> { continuation in
             Task.detached {
                 do {
-                    try work { continuation.yield($0) }
+                    try await work { continuation.yield($0) }
                 } catch {
                     continuation.yield("error: \(error)")
                 }

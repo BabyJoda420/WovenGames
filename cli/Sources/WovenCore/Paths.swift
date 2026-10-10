@@ -6,7 +6,12 @@ public struct Paths: Sendable {
     public var home: URL
     public var steamApp: URL
 
-    public init(home: URL = URL(filePath: NSHomeDirectory()),
+    /// WOVEN_HOME redirects everything (tests, CI, trying a release without touching a real setup)
+    public static var defaultHome: URL {
+        ProcessInfo.processInfo.environment["WOVEN_HOME"].map { URL(filePath: $0) } ?? URL(filePath: NSHomeDirectory())
+    }
+
+    public init(home: URL = Paths.defaultHome,
                 steamApp: URL = URL(filePath: "/Applications/Steam.app")) {
         self.home = home
         self.steamApp = steamApp

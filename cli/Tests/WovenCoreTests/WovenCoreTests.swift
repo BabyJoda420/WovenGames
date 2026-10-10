@@ -397,3 +397,23 @@ extension LibraryTests {
         XCTAssertEqual(s.summary, "DXMT · -dx11")
     }
 }
+
+final class ReleaseTests: XCTestCase {
+    func testValveManifestParses() throws {
+        let url = URL(filePath: #filePath).deletingLastPathComponent()
+            .appending(path: "../../../notproton/app/Sources/NotProtonApp/Resources/valve-packages.manifest").standardizedFileURL
+        let m = ReleaseInstaller.ValveManifest(try String(contentsOf: url, encoding: .utf8))
+        XCTAssertEqual(m.bases.count, 3)
+        XCTAssertEqual(Set(m.packages.map(\.id)), ["linux", "win64"])
+        XCTAssertEqual(m.files.count, 10)
+        XCTAssertTrue(m.files.contains { $0.bridge == "steamclient64.dll" && $0.package == "linux" })
+        XCTAssertTrue(m.files.allSatisfy { $0.sha.count == 64 })
+    }
+
+    func testSHA256() throws {
+        let f = FileManager.default.temporaryDirectory.appending(path: "sha-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: f) }
+        try Data("abc".utf8).write(to: f)
+        XCTAssertEqual(ReleaseInstaller.sha256(of: f), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+    }
+}

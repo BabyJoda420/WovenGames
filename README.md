@@ -19,6 +19,22 @@ wined3d, picked per game.
 | `notproton/` | Steam hook dylib, lsteamclient bridge, steam.exe shim, setup app (to be renamed) |
 | `cli/` | `woven`, the command-line tool (Swift): doctor, runners, prefixes, backend detection, run |
 
+## Installing a release
+
+Download `WovenGames-<version>.zip` from Releases, open the app (right-click → Open the first time),
+click **Install**, then **Patch Steam**. Or from a terminal:
+
+```sh
+woven install --latest      # engine + D3DMetal + Valve's Steam DLLs, each hash-checked
+woven steam patch
+```
+
+## Making a release
+
+Push a tag such as `v0.1.0`. `.github/workflows/release.yml` builds the engine and the app on
+Apple Silicon and publishes them. The workflows stay off while the repository is private.
+Locally: `engine/scripts/build-all.sh && engine/scripts/package-release.sh`.
+
 ## Building the engine
 
 ```sh

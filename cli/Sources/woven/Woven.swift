@@ -3,11 +3,11 @@ import Foundation
 import WovenCore
 
 @main
-struct Woven: ParsableCommand {
+struct Woven: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "WovenGames: play Windows games on Apple Silicon.",
         version: "0.1.0",
-        subcommands: [Doctor.self, Setup.self, RunnerCommand.self, PrefixCommand.self, BackendCommand.self, Run.self, SteamCommand.self]
+        subcommands: [Doctor.self, Install.self, Setup.self, RunnerCommand.self, PrefixCommand.self, BackendCommand.self, Run.self, SteamCommand.self]
     )
 }
 
@@ -43,7 +43,37 @@ extension Woven {
         )
         @Option(help: "Runner id in the engine build.") var runner = "selfbuilt-cx26.3-r1"
         func run() throws {
-            try WovenCore.Setup().run(runnerID: runner) { print($0) }
+            try WovenCore.Setup(payload: EngineBuild.locate().payload(runnerID: runner)).run { print($0) }
+            print("done; next: woven steam patch")
+        }
+    }
+}
+
+// MARK: - install
+
+extension Woven {
+    struct Install: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Install a WovenGames release: the engine, plus D3DMetal and Valve's Steam DLLs fetched on this Mac.",
+            discussion: "Pass a wovengames-engine-*.tar.xz file or URL, or --latest for the newest GitHub release."
+        )
+
+        @Argument(help: "Release archive path or URL.") var archive: String?
+        @Flag(help: "Install the newest release from GitHub.") var latest = false
+
+        func run() async throws {
+            let url: URL
+            if latest {
+                url = try await ReleaseInstaller.latestReleaseAsset()
+                print("latest release: \(url.absoluteString)")
+            } else if let archive, let remote = URL(string: archive), remote.scheme == "https" {
+                url = remote
+            } else if let archive {
+                url = URL(filePath: archive, relativeTo: URL(filePath: FileManager.default.currentDirectoryPath, directoryHint: .isDirectory)).standardizedFileURL
+            } else {
+                throw ValidationError("pass a release archive, a URL, or --latest")
+            }
+            try await ReleaseInstaller().install(archive: url) { print($0) }
             print("done; next: woven steam patch")
         }
     }
@@ -85,7 +115,7 @@ extension Woven {
             func run() throws {
                 let source: URL
                 if let path {
-                    source = URL(filePath: path, relativeTo: URL(filePath: FileManager.default.currentDirectoryPath)).standardizedFileURL
+                    source = URL(filePath: path, relativeTo: URL(filePath: FileManager.default.currentDirectoryPath, directoryHint: .isDirectory)).standardizedFileURL
                 } else {
                     let dist = Paths().engineDist
                     let built = ((try? FileManager.default.contentsOfDirectory(at: dist, includingPropertiesForKeys: [.contentModificationDateKey])) ?? [])
