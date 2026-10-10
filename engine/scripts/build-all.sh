@@ -62,11 +62,12 @@ done
 # WovenGames: notproton/ is vendored at the repo root; engine/notproton is a symlink to it.
 [ -f "$ROOT/notproton/Makefile" ] || { echo "notproton submodule missing (expected the vendored ../notproton tree)" >&2; exit 1; }
 
-step "x86_64 host libraries (gmp, nettle, gnutls, freetype, SDL2, MoltenVK, FFmpeg)"
-run deps "$ROOT/scripts/build-deps.sh"
-
+# WovenGames: sources first; build-deps.sh builds gmp/gnutls/freetype from the CrossOver drop.
 step "Wine sources (CrossOver 26.3.0 + patches/series + lsteamclient)"
 [ -d "$ROOT/src/wine/.git" ] || run prepare "$ROOT/scripts/prepare-wine-src.sh"
+
+step "x86_64 host libraries (gmp, nettle, gnutls, freetype, SDL2, MoltenVK, FFmpeg)"
+run deps "$ROOT/scripts/build-deps.sh"
 
 step "Wine (native tools, then the x86_64 runner build; this is the long one)"
 run wine "$ROOT/scripts/build-wine.sh"
