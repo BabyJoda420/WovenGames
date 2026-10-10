@@ -113,6 +113,16 @@ final class BackendDetectorTests: XCTestCase {
         XCTAssertEqual(detection.backend, .dxmt)
     }
 
+    func testUnityMeansD3D11DespiteItsOpenGLImport() throws {
+        let dir = try tempDir()
+        try write(big(makePE(imports: ["OPENGL32.dll", "KERNEL32.dll"])), dir.appending(path: "UnityPlayer.dll"))
+        try write(makePE(imports: ["KERNEL32.dll"]), dir.appending(path: "Game.exe"))
+        XCTAssertEqual(BackendDetector.detect(launchTarget: dir.appending(path: "Game.exe"), installDir: dir).backend, .dxmt)
+        // a Unity D3D12 build ships the Agility SDK and goes to D3DMetal
+        try write(Data("x".utf8), dir.appending(path: "D3D12/D3D12Core.dll"))
+        XCTAssertEqual(BackendDetector.detect(launchTarget: nil, installDir: dir).backend, .d3dmetal)
+    }
+
     func testRuntimeNameFallbackForUE5() throws {
         let dir = try tempDir()
         var exe = big(makePE(imports: ["KERNEL32.dll"]))

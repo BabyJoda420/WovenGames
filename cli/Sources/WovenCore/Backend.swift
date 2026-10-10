@@ -57,6 +57,13 @@ public enum BackendDetector {
             return BackendDetection(api: .d3d12, notes: notes)
         }
 
+        // Unity links opengl32 statically as a fallback but renders with Direct3D 11 by default
+        // on Windows (D3D12 builds ship the Agility SDK, caught above).
+        if files.contains(where: { $0.relative.lowercased().hasSuffix("/unityplayer.dll") && $0.relative.filter { $0 == "/" }.count <= 2 }) {
+            notes.append("hint: Unity player, Direct3D 11 by default")
+            return BackendDetection(api: .d3d11, notes: notes)
+        }
+
         // The launch target plus the largest executables (a launcher stub often fronts the
         // real *-Shipping.exe), and the engine DLLs that do the rendering.
         var candidates: [URL] = []

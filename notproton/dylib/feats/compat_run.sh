@@ -460,6 +460,14 @@ detect_d3d() {
     echo d3d12
     return
   fi
+  # WovenGames: Unity links opengl32 statically as a fallback but renders with Direct3D 11 by
+  # default on Windows (D3D12 builds ship the Agility SDK, caught above), so a Unity game must
+  # not be classified by that OpenGL import.
+  if find "$STEAM_COMPAT_INSTALL_PATH" -maxdepth 2 -iname 'UnityPlayer.dll' 2>/dev/null | grep -q .; then
+    echo "  hint: Unity player, Direct3D 11 by default" >> "$log" 2>&1 || true
+    echo d3d11
+    return
+  fi
   # the launch target plus the largest executables (a launcher stub often fronts the
   # real *-Shipping.exe), and the engine DLLs that do the rendering (Unity, CryEngine...)
   candidates=$(
@@ -562,7 +570,9 @@ if [ "${MTL_HUD_ENABLED:-0}" = 1 ]; then
   fi
 fi
 
-export WINEDEBUG="${WINEDEBUG:-err+all,fixme-all}"
+# WovenGames: quiet by default like Proton; a broken renderer can log millions of err lines,
+# which costs frames by itself. WINEDEBUG=err+all,fixme-all in launch options brings them back.
+export WINEDEBUG="${WINEDEBUG:--all}"
 trap - EXIT
 echo "launch_env=$launch_env" >> "$log" 2>&1 || true
 echo "=== launching ($verb): $WINELOADER $* ===" >> "$log" 2>&1 || true

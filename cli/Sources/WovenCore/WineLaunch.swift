@@ -10,7 +10,7 @@ public struct WineLaunch: Sendable {
     public var msync = true
     /// Apple's Metal Performance HUD
     public var hud = false
-    /// WINEDEBUG; nil keeps the run script's default
+    /// WINEDEBUG; nil means quiet ("-all"), like the run script
     public var debug: String?
 
     public init(runner: Runner, prefix: URL, backend: Backend) {
@@ -31,7 +31,7 @@ public struct WineLaunch: Sendable {
         env["WINESERVER"] = runner.server.path(percentEncoded: false)
         env["WINEDLLPATH"] = "\(root)/lib/wine/x86_64-windows:\(runner.wineUnix.path(percentEncoded: false))"
         env["WINEMSYNC"] = msync ? "1" : "0"
-        env["WINEDEBUG"] = debug ?? "err+all,fixme-all"
+        env["WINEDEBUG"] = debug ?? "-all"
         env["PATH"] = "\(root)/bin:" + (base["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin")
         env["DYLD_FALLBACK_LIBRARY_PATH"] = "\(root)/lib:/usr/local/lib:/usr/lib"
 
