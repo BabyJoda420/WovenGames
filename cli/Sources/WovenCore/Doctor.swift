@@ -58,7 +58,12 @@ public enum Doctor {
             }
             switch steam.injection {
             case .none: add(.info, "  Steam Play hook", "not installed (`woven setup`, then `woven steam patch`)")
-            case .wovenGames: add(.ok, "  Steam Play hook", "WovenGames")
+            case .wovenGames:
+                if SteamPatcher(paths: paths).deployedHookIsCurrent {
+                    add(.ok, "  Steam Play hook", "WovenGames")
+                } else {
+                    add(.warn, "  Steam Play hook", "Steam carries an older hook; run `woven steam patch` (restarts Steam)")
+                }
             case .notProton: add(.info, "  Steam Play hook", "NotProton is installed; `woven steam patch` takes it over")
             case .other(let lib): add(.warn, "  Steam Play hook", "unknown library injected: \(lib)")
             }

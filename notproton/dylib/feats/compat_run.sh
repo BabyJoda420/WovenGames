@@ -8,6 +8,7 @@ shift || true
 # Options set from the Compatibility page are passed along as
 # launch options.
 launch_env=""
+launch_names=""
 argc=$#
 argi=0
 while [ "$argi" -lt "$argc" ]; do
@@ -18,6 +19,7 @@ while [ "$argi" -lt "$argc" ]; do
       # shellcheck disable=SC2163 # arg is a NAME=VALUE pair, which export takes as an assignment
       export "$arg"
       launch_env="$launch_env $arg"
+      launch_names="$launch_names ${arg%%=*}"
       ;;
     *) set -- "$@" "$arg" ;;
   esac
@@ -119,6 +121,23 @@ case "$app_id" in ''|0) app_id="$SteamAppId" ;; esac
 case "$app_id" in ''|0) app_id=$(basename "$STEAM_COMPAT_DATA_PATH" 2>/dev/null) ;; esac
 case "$app_id" in ''|*[!0-9]*) app_id=0 ;; esac
 echo "app_id=$app_id (STEAM_COMPAT_APP_ID=$STEAM_COMPAT_APP_ID)" >> "$log" 2>&1 || true
+
+# WovenGames: per-game settings from the app, games/<appid>.env, same name rules as the launch
+# options. They override global.env; the game's own launch options still win.
+game_env="$HOME/Library/Application Support/WovenGames/games/$app_id.env"
+if [ "$app_id" != 0 ] && [ -r "$game_env" ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      CX_GRAPHICS*=*|D3DM_*=*|DXMT_*=*|DXVK_*=*|MTL_*=*|NOTPROTON_*=*|ROSETTA_*=*|WINE*=*)
+        case " $launch_names " in *" ${line%%=*} "*) continue ;; esac
+        # shellcheck disable=SC2163 # line is a NAME=VALUE pair
+        export "$line"
+        launch_env="$launch_env $line"
+        echo "game setting: $line" >> "$log" 2>&1 || true
+        ;;
+    esac
+  done < "$game_env"
+fi
 
 [ -n "$SteamAppId" ] || export SteamAppId="$app_id"
 [ -n "$SteamGameId" ] || export SteamGameId="$app_id"

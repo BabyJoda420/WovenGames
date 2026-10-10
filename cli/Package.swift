@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .executable(name: "woven", targets: ["woven"]),
+        .executable(name: "WovenGames", targets: ["WovenGames"]),
         .library(name: "WovenCore", targets: ["WovenCore"]),
     ],
     dependencies: [
@@ -20,6 +21,7 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
+        .executableTarget(name: "WovenGames", dependencies: ["WovenCore"], path: "Sources/WovenGamesApp"),
         .testTarget(name: "WovenCoreTests", dependencies: ["WovenCore"]),
     ]
 )

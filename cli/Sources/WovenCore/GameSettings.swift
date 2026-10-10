@@ -1,0 +1,81 @@
+// Per-game settings: ~/Library/Application Support/WovenGames/games/<appid>.env
+//
+// KEY=VALUE lines the compat tool's run script exports before starting the game. They override
+// global.env; launch options set in Steam still win. Lines this type does not know are kept.
+
+import Foundation
+
+public struct GameSettings: Equatable, Sendable {
+    public enum BackendChoice: String, CaseIterable, Identifiable, Sendable {
+        case auto, d3dmetal, dxmt, wined3d
+        public var id: String { rawValue }
+        public var label: String {
+            switch self {
+            case .auto: "Automatic"
+            case .d3dmetal: "D3DMetal (DirectX 11/12)"
+            case .dxmt: "DXMT (DirectX 10/11)"
+            case .wined3d: "WineD3D (OpenGL, older games)"
+            }
+        }
+    }
+
+    public var backend: BackendChoice = .auto
+    public var metalHUD = false
+    public var msync = true
+    public var retina = false
+    /// lines for keys this type does not manage, kept verbatim
+    public var otherLines: [String] = []
+
+    static let backendKey = "CX_GRAPHICS_BACKEND"
+    static let hudKey = "MTL_HUD_ENABLED"
+    static let msyncKey = "WINEMSYNC"
+    static let retinaKey = "NOTPROTON_RETINA"
+
+    public init() {}
+
+    public static func file(appID: String, paths: Paths = Paths()) -> URL {
+        paths.support.appending(path: "games/\(appID).env")
+    }
+
+    public static func load(appID: String, paths: Paths = Paths()) -> GameSettings {
+        guard let text = try? String(contentsOf: file(appID: appID, paths: paths), encoding: .utf8) else { return GameSettings() }
+        return GameSettings(parsing: text)
+    }
+
+    public init(parsing text: String) {
+        for raw in text.split(whereSeparator: \.isNewline) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty else { continue }
+            let parts = line.split(separator: "=", maxSplits: 1).map(String.init)
+            let key = parts[0], value = parts.count > 1 ? parts[1] : ""
+            switch key {
+            case Self.backendKey: backend = BackendChoice(rawValue: value) ?? .auto
+            case Self.hudKey: metalHUD = value == "1"
+            case Self.msyncKey: msync = value != "0"
+            case Self.retinaKey: retina = value == "1"
+            default: otherLines.append(line)
+            }
+        }
+    }
+
+    /// Only what differs from the defaults is written, so the run script's defaults still apply.
+    public var text: String {
+        var lines: [String] = []
+        if backend != .auto { lines.append("\(Self.backendKey)=\(backend.rawValue)") }
+        if metalHUD { lines.append("\(Self.hudKey)=1") }
+        if !msync { lines.append("\(Self.msyncKey)=0") }
+        if retina { lines.append("\(Self.retinaKey)=1") }
+        lines += otherLines
+        return lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
+    }
+
+    public func save(appID: String, paths: Paths = Paths()) throws {
+        let url = Self.file(appID: appID, paths: paths)
+        if text.isEmpty {
+            try? FileManager.default.removeItem(at: url)
+            return
+        }
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try text.write(to: url, atomically: true, encoding: .utf8)
+    }
+}

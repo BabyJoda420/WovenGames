@@ -41,3 +41,13 @@ cd cli && swift build -c release      # needs Xcode (or Command Line Tools with 
 ## License
 
 GPL-3.0. See [NOTICE](NOTICE) for the parts under other licenses.
+
+## The app
+
+```sh
+cli/scripts/build-app.sh --open      # builds cli/.build/WovenGames.app and opens it
+```
+
+- **Status** lists the checks, installs the engine, patches or restores Steam, and pins Steam's build.
+- **Games** lists installed Windows games. Each game has its own graphics backend, Metal HUD, Retina and msync
+  settings (stored in `~/Library/Application Support/WovenGames/games/<appid>.env`), plus its launch log and prefix tools.

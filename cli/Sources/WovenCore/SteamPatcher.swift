@@ -6,6 +6,7 @@
 // Writing into /Applications/Steam.app needs the App Management permission for the app that
 // runs this (System Settings > Privacy & Security > App Management).
 
+import CryptoKit
 import Foundation
 
 public enum SteamPatchError: Error, CustomStringConvertible {
@@ -69,6 +70,7 @@ public struct SteamPatcher: Sendable {
         try fm.createDirectory(at: macOS, withIntermediateDirectories: true)
         try? fm.removeItem(at: deployedDylib)
         try fm.copyItem(at: source, to: deployedDylib)
+        try (Self.sha256(of: source) ?? "").write(to: deployedHashFile, atomically: true, encoding: .utf8)
         if takingOver {
             try? fm.removeItem(at: notProtonDylib)
             log("took over from NotProton (removed notproton.dylib from Steam.app)")
@@ -80,6 +82,22 @@ public struct SteamPatcher: Sendable {
         try writePlist(plist)
         try resign(log: log)
         log("Steam patched: \(ours)")
+    }
+
+    /// false when Steam.app carries an older hook than the one `woven setup` installed.
+    /// `patch` records the hash of the hook it deployed (re-signing changes the deployed copy).
+    public var deployedHookIsCurrent: Bool {
+        guard FileManager.default.fileExists(atPath: deployedDylib.path(percentEncoded: false)),
+              let installed = Self.sha256(of: paths.support.appending(path: "wovengames.dylib")) else { return true }
+        let recorded = (try? String(contentsOf: deployedHashFile, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return recorded == installed
+    }
+
+    var deployedHashFile: URL { paths.support.appending(path: "deployed-hook.sha256") }
+
+    static func sha256(of url: URL) -> String? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     // MARK: unpatch

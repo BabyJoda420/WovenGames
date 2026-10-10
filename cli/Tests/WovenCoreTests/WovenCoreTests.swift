@@ -298,3 +298,91 @@ final class SteamPatcherTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: cfg, encoding: .utf8), "Foo=1\n")
     }
 }
+
+final class LibraryTests: XCTestCase {
+    func testVDF() {
+        let text = """
+        "libraryfolders"
+        {
+        \t"0"
+        \t{
+        \t\t"path"\t\t"/Users/x/Library/Application Support/Steam"
+        \t\t"apps" { "3180310" "512" }
+        \t}
+        \t"1"
+        \t{
+        \t\t"path"\t\t"/Volumes/Games/SteamLibrary" // external
+        \t\t"label"\t\t"say \\"hi\\""
+        \t}
+        }
+        """
+        let root = VDF.parse(text)
+        let folders = root["LibraryFolders"]!
+        XCTAssertEqual(folders.pairs.count, 2)
+        XCTAssertEqual(folders["1"]?["path"]?.string, "/Volumes/Games/SteamLibrary")
+        XCTAssertEqual(folders["1"]?["label"]?.string, "say \"hi\"")
+        XCTAssertEqual(folders["0"]?["apps"]?["3180310"]?.string, "512")
+    }
+
+    func testGameSettingsRoundTrip() {
+        var s = GameSettings(parsing: "CX_GRAPHICS_BACKEND=dxmt\nDXMT_LOG_LEVEL=info\nMTL_HUD_ENABLED=1\n")
+        XCTAssertEqual(s.backend, .dxmt)
+        XCTAssertTrue(s.metalHUD)
+        XCTAssertTrue(s.msync)
+        XCTAssertEqual(s.otherLines, ["DXMT_LOG_LEVEL=info"])
+        s.backend = .auto
+        s.metalHUD = false
+        s.msync = false
+        XCTAssertEqual(s.text, "WINEMSYNC=0\nDXMT_LOG_LEVEL=info\n")
+        XCTAssertEqual(GameSettings().text, "")
+    }
+
+    func testGameSettingsSaveRemovesEmptyFile() throws {
+        let home = FileManager.default.temporaryDirectory.appending(path: "woven-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: home) }
+        let paths = Paths(home: home)
+        var s = GameSettings()
+        s.backend = .d3dmetal
+        try s.save(appID: "1874000", paths: paths)
+        XCTAssertEqual(GameSettings.load(appID: "1874000", paths: paths).backend, .d3dmetal)
+        try GameSettings().save(appID: "1874000", paths: paths)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: GameSettings.file(appID: "1874000", paths: paths).path(percentEncoded: false)))
+    }
+
+    func testLastRunReadsTheNewestRun() {
+        let log = """
+        === wovengames run Sat Oct 10 18:09:51 CEST 2026 ===
+        graphics: wined3d from auto (opengl)
+        === wovengames run Sat Oct 10 18:18:53 CEST 2026 ===
+        runner=selfbuilt-cx26.3-r1 kind=selfbuilt
+          hint: Unity player, Direct3D 11 by default
+        graphics: dxmt from auto (d3d11)
+        """
+        let run = SteamLibrary.lastRun(log: log)
+        XCTAssertEqual(run?.date, "Sat Oct 10 18:18:53 CEST 2026")
+        XCTAssertEqual(run?.backend, "dxmt")
+        XCTAssertEqual(run?.backendReason, "auto (d3d11)")
+        XCTAssertNil(run?.problem)
+    }
+
+    func testRealLibraryListsWindowsGames() {
+        // smoke test against this Mac's Steam library, if there is one
+        let games = SteamLibrary().windowsGames()
+        print("windows games: \(games.map { "\($0.name) (\($0.appID))" })")
+    }
+}
+
+extension SteamPatcherTests {
+    func testHookCurrentTracksTheInstalledBuild() throws {
+        try patcher.patch()
+        XCTAssertTrue(patcher.deployedHookIsCurrent)
+        // a newer build installed by `woven setup`
+        let source = home.appending(path: "Library/Application Support/WovenGames/wovengames.dylib")
+        let src = home.appending(path: "y.c")
+        try "int y(void){return 1;}\n".write(to: src, atomically: true, encoding: .utf8)
+        XCTAssertEqual(Shell.capture("/usr/bin/clang", ["-dynamiclib", "-o", source.path(percentEncoded: false), src.path(percentEncoded: false)]).status, 0)
+        XCTAssertFalse(patcher.deployedHookIsCurrent)
+        try patcher.patch()
+        XCTAssertTrue(patcher.deployedHookIsCurrent)
+    }
+}
