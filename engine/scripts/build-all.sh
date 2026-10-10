@@ -24,6 +24,16 @@ run() { # name command...
 step "checking prerequisites"
 [ "$(uname -m)" = arm64 ] || { echo "Apple Silicon only" >&2; exit 1; }
 xcode-select -p >/dev/null 2>&1 || { echo "install the Xcode Command Line Tools: xcode-select --install" >&2; exit 1; }
+# WovenGames: stale Command Line Tools (an SDK older than the 14.0 deployment target) break the
+# build. Without touching xcode-select, prefer an installed Xcode whose SDK is new enough.
+if [ -z "${DEVELOPER_DIR:-}" ] && [ "$(xcrun --show-sdk-version 2>/dev/null | cut -d. -f1)" -lt 14 ] 2>/dev/null; then
+    for x in /Applications/Xcode.app /Applications/Xcode-beta.app /Applications/Xcode*.app; do
+        if [ -d "$x/Contents/Developer" ] && [ "$(DEVELOPER_DIR="$x/Contents/Developer" xcrun --show-sdk-version 2>/dev/null | cut -d. -f1)" -ge 14 ] 2>/dev/null; then
+            export DEVELOPER_DIR="$x/Contents/Developer"; break
+        fi
+    done
+fi
+echo "toolchain: $(clang --version | head -1), SDK $(xcrun --show-sdk-version)"
 arch -x86_64 /usr/bin/true 2>/dev/null || { echo "install Rosetta 2: softwareupdate --install-rosetta" >&2; exit 1; }
 command -v brew >/dev/null || { echo "Homebrew is required (https://brew.sh)" >&2; exit 1; }
 missing=""
