@@ -76,8 +76,15 @@ woven steam pin|unpin             # writes or removes steam.cfg
 | M1 | **Engine**: build the runner locally (~20–30 min, ~15 GB) | ✅ done: `tests/probe-backends.sh` passes all backends on an M4 |
 | M2 | **CLI**: `woven` with doctor/runner/prefix/backend/run | ✅ done: d3dprobe runs via `woven run`, auto backend |
 | M3 | **Steam integration**: patch, pin, register the compat tool, rename notproton→wovengames (paths, tool name, dylib) | ✅ done 2026-10-10: Billie's Wheelie (Unity, app 3180310) installs and plays from macOS Steam on DXMT, Steam build 1788652215. Expedition 33 still to do once ~55 GB is free |
-| M4 | **App**: SwiftUI onboarding (permissions, D3DMetal import, Steam patch), per-game settings, one-click uninstall that restores Steam | a non-technical user can set it up |
+| M4 | **App**: SwiftUI onboarding (permissions, D3DMetal import, Steam patch), per-game settings, one-click uninstall that restores Steam | 🟡 in progress: WovenGames.app (Status + Games pages), per-game settings, known-good settings database (`compat/`), Update Hook. Still to do: enabling WovenGames for a game from the app, onboarding for the App Management permission |
 | M5 | **Distribution**: CI builds the runner and app and publishes Releases, so users never compile; Steam-build tracking | download, open, play |
+
+### Tested games
+
+| Game | Engine / API | Result |
+|---|---|---|
+| Billie's Wheelie (3180310) | Unity 2022.3, D3D11 | ✅ smooth on DXMT (after the Unity detection fix; wined3d was broken) |
+| Life is Strange: Double Exposure (1874000) | UE5, D3D12 | 🟡 D3D12/D3DMetal hangs in the menu. `-dx11` on DXMT: menus slow and glitchy, gameplay ~45 fps with a few hitches (`compat/1874000.env`) |
 
 ### Notes for M4 (from M3 testing)
 
