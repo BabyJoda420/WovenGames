@@ -18,6 +18,10 @@ final class AppModel {
     var hookOutdated = false
     /// Steam build support, with Valve's newest builds (loaded after the rest)
     var builds: SteamBuildReport?
+    /// App Management permission for this app (nil until checked; checking can make macOS
+    /// show its "prevented from modifying apps" notice, so it only runs in setup and patching)
+    var access: AppManagementAccess?
+    var showSetup = false
     var busy: String?
     /// lines from the last action, shown under the status checks
     var activity: [String] = []
@@ -66,6 +70,44 @@ final class AppModel {
             try SteamPatcher().pin()
             log("Steam no longer updates at launch")
         }
+        await checkAccess()
+        // macOS refused: walk the user through allowing it
+        if access == .denied { showSetup = true }
+    }
+
+    func checkAccess() async {
+        let app = paths.steamApp
+        access = await Task.detached { AppManagement.probe(steamApp: app) }.value
+        appLog("App Management for Steam.app: \(access.map { "\($0)" } ?? "unknown")")
+    }
+
+    /// ~/Library/Application Support/WovenGames/logs/app.log, for support questions
+    func appLog(_ line: String) {
+        let url = paths.logs.appending(path: "app.log")
+        try? FileManager.default.createDirectory(at: paths.logs, withIntermediateDirectories: true)
+        let entry = "\(ISO8601DateFormatter().string(from: Date())) \(line)\n"
+        if let handle = try? FileHandle(forWritingTo: url) {
+            handle.seekToEndOfFile()
+            handle.write(Data(entry.utf8))
+            try? handle.close()
+        } else {
+            try? entry.write(to: url, atomically: true, encoding: .utf8)
+        }
+    }
+
+    func openAppManagementSettings() {
+        if !NSWorkspace.shared.open(AppManagement.settingsURL) {
+            NSWorkspace.shared.open(AppManagement.legacySettingsURL)
+        }
+    }
+
+    /// macOS applies a changed App Management switch to an app when it starts again.
+    func relaunch() {
+        let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: config) { _, _ in
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+        }
     }
 
     func restoreSteam() async {
@@ -111,6 +153,7 @@ final class AppModel {
             if line.hasPrefix("error: ") { error = String(line.dropFirst(7)) } else { activity.append(line) }
         }
         busy = nil
+        appLog("\(title): \(error.map { "failed: \($0)" } ?? "done")")
         await refresh()
     }
 

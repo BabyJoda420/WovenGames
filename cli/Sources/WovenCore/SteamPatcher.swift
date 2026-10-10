@@ -16,6 +16,9 @@ public enum SteamPatchError: Error, CustomStringConvertible {
     case foreignInsert(String)
     case plist(String)
     case command(String, String)
+    /// macOS refused: App Management is off for the app running this
+    case appManagementDenied
+    case notWritable(String)
 
     public var description: String {
         switch self {
@@ -25,6 +28,9 @@ public enum SteamPatchError: Error, CustomStringConvertible {
         case .foreignInsert(let lib): "Steam already injects \(lib), which is not WovenGames or NotProton; not touching it"
         case .plist(let why): "could not update Steam's Info.plist: \(why)"
         case .command(let cmd, let out): "\(cmd) failed: \(out)\nIf this is a permission error, allow your terminal under System Settings > Privacy & Security > App Management."
+        case .appManagementDenied:
+            "macOS did not allow changing Steam.app. Turn on the app you ran this from (WovenGames, or your terminal for `woven`) under System Settings > Privacy & Security > App Management, then try again."
+        case .notWritable(let why): "Steam.app cannot be changed (\(why)). Is it owned by another user? Reinstall Steam from steampowered.com as yourself."
         }
     }
 }
@@ -56,7 +62,27 @@ public struct SteamPatcher: Sendable {
         guard fm.fileExists(atPath: steam.app.path(percentEncoded: false)) else { throw SteamPatchError.steamMissing }
         let source = paths.support.appending(path: "wovengames.dylib")
         guard fm.fileExists(atPath: source.path(percentEncoded: false)) else { throw SteamPatchError.notSetUp }
+        try checkAccess()
         try quitSteam(log: log)
+        do {
+            try patchQuitSteam(source: source, log: log)
+        } catch let error where AppManagement.isDenial(error) {
+            throw SteamPatchError.appManagementDenied
+        }
+    }
+
+    /// Fails early, before Steam is quit, when macOS will not let us change Steam.app.
+    public func checkAccess() throws {
+        switch AppManagement.probe(steamApp: steam.app) {
+        case .granted: return
+        case .denied: throw SteamPatchError.appManagementDenied
+        case .notWritable(let why): throw SteamPatchError.notWritable(why)
+        case .steamMissing: throw SteamPatchError.steamMissing
+        }
+    }
+
+    func patchQuitSteam(source: URL, log: (String) -> Void) throws {
+        let fm = FileManager.default
 
         var plist = try readPlist()
         var env = plist["LSEnvironment"] as? [String: Any] ?? [:]
@@ -105,6 +131,7 @@ public struct SteamPatcher: Sendable {
     public func unpatch(log: (String) -> Void = { _ in }) throws {
         let fm = FileManager.default
         guard fm.fileExists(atPath: steam.app.path(percentEncoded: false)) else { throw SteamPatchError.steamMissing }
+        try checkAccess()
         try quitSteam(log: log)
         if let data = try? Data(contentsOf: originalPlist) {
             try data.write(to: steam.infoPlist)

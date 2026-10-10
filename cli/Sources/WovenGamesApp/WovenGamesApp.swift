@@ -10,10 +10,23 @@ struct WovenGamesApp: App {
             ContentView()
                 .environment(model)
                 .frame(minWidth: 820, minHeight: 520)
-                .task { await model.refresh() }
+                .task {
+                    await model.refresh()
+                    // -WovenShowSetup YES opens it regardless (screenshots, support)
+                    if !model.isReady || model.hookOutdated || UserDefaults.standard.bool(forKey: "WovenShowSetup") {
+                        model.showSetup = true
+                    }
+                }
+                .sheet(isPresented: Binding(get: { model.showSetup }, set: { model.showSetup = $0 })) {
+                    SetupAssistant().environment(model)
+                }
         }
         .windowResizability(.contentMinSize)
         .commands {
+            CommandGroup(after: .windowArrangement) {
+                Button("Setup Assistant…") { model.showSetup = true }
+                    .keyboardShortcut("s", modifiers: [.command, .shift])
+            }
             CommandGroup(after: .toolbar) {
                 Button("Refresh") { Task { await model.refresh() } }
                     .keyboardShortcut("r")

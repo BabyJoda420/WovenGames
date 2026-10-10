@@ -140,6 +140,9 @@ struct StatusView: View {
             Spacer()
             if model.isReady {
                 Button("Open Steam") { model.openSteam() }
+            } else {
+                Button("Setup Assistant…") { model.showSetup = true }
+                    .buttonStyle(.borderedProminent)
             }
         }
         .padding(.vertical, 4)

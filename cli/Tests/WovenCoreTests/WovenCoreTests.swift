@@ -456,3 +456,59 @@ final class SteamBuildsTests: XCTestCase {
         XCTAssertEqual(r.verdict(for: "2"), .failsOffline(2))
     }
 }
+
+final class AppManagementTests: XCTestCase {
+    func testProbe() throws {
+        let fm = FileManager.default
+        let app = fm.temporaryDirectory.appending(path: "probe-\(UUID().uuidString)/Steam.app")
+        let contents = app.appending(path: "Contents").path(percentEncoded: false)
+        try fm.createDirectory(atPath: contents, withIntermediateDirectories: true)
+        defer {
+            _ = Shell.capture("/usr/bin/chflags", ["nouchg", contents])
+            _ = try? fm.removeItem(at: app.deletingLastPathComponent())
+        }
+        XCTAssertEqual(AppManagement.probe(steamApp: app), .granted)
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: contents), [], "the probe cleans up")
+
+        // an immutable folder answers EPERM, like macOS refusing App Management
+        XCTAssertEqual(Shell.capture("/usr/bin/chflags", ["uchg", contents]).status, 0)
+        XCTAssertEqual(AppManagement.probe(steamApp: app), .denied)
+        _ = Shell.capture("/usr/bin/chflags", ["nouchg", contents])
+
+        // a read-only folder answers EACCES
+        try fm.setAttributes([.posixPermissions: 0o555], ofItemAtPath: contents)
+        if case .notWritable = AppManagement.probe(steamApp: app) {} else { XCTFail("expected notWritable") }
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: contents)
+
+        XCTAssertEqual(AppManagement.probe(steamApp: app.deletingLastPathComponent().appending(path: "Nope.app")), .steamMissing)
+    }
+
+    func testDenialDetection() {
+        let eperm = NSError(domain: NSPOSIXErrorDomain, code: Int(EPERM))
+        XCTAssertTrue(AppManagement.isDenial(NSError(domain: NSCocoaErrorDomain, code: NSFileWriteNoPermissionError,
+                                                     userInfo: [NSUnderlyingErrorKey: eperm])))
+        XCTAssertFalse(AppManagement.isDenial(NSError(domain: NSCocoaErrorDomain, code: NSFileWriteNoPermissionError,
+                                                      userInfo: [NSUnderlyingErrorKey: NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES))])))
+        XCTAssertFalse(AppManagement.isDenial(NSError(domain: NSCocoaErrorDomain, code: NSFileNoSuchFileError)))
+    }
+
+    func testPatchStopsBeforeQuittingSteamWhenDenied() throws {
+        let home = FileManager.default.temporaryDirectory.appending(path: "deny-\(UUID().uuidString)")
+        let app = home.appending(path: "Steam.app")
+        let contents = app.appending(path: "Contents").path(percentEncoded: false)
+        try FileManager.default.createDirectory(atPath: contents, withIntermediateDirectories: true)
+        let support = home.appending(path: "Library/Application Support/WovenGames")
+        try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+        try Data().write(to: support.appending(path: "wovengames.dylib"))
+        defer {
+            _ = Shell.capture("/usr/bin/chflags", ["nouchg", contents])
+            try? FileManager.default.removeItem(at: home)
+        }
+        _ = Shell.capture("/usr/bin/chflags", ["uchg", contents])
+        var patcher = SteamPatcher(paths: Paths(home: home, steamApp: app))
+        patcher.manageSteamProcess = false
+        XCTAssertThrowsError(try patcher.patch()) { error in
+            guard case SteamPatchError.appManagementDenied = error else { return XCTFail("got \(error)") }
+        }
+    }
+}
