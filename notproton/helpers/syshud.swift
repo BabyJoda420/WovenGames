@@ -190,7 +190,7 @@ final class HUD: NSObject {
         guard let front = NSWorkspace.shared.frontmostApplication else { return false }
         if front.bundleIdentifier == appID { return true }
         let paths = [front.executableURL?.path, front.bundleURL?.path].compactMap { $0 }
-        return paths.contains { $0.contains("/winetemp-") || $0.contains("/notproton/launchers/") }
+        return paths.contains { $0.contains("/winetemp-") || $0.contains("/WovenGames/launchers/") }
     }
 
     private func refresh() {

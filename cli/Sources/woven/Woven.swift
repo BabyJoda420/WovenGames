@@ -7,7 +7,7 @@ struct Woven: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "WovenGames: play Windows games on Apple Silicon.",
         version: "0.1.0",
-        subcommands: [Doctor.self, RunnerCommand.self, PrefixCommand.self, BackendCommand.self, Run.self, SteamCommand.self]
+        subcommands: [Doctor.self, Setup.self, RunnerCommand.self, PrefixCommand.self, BackendCommand.self, Run.self, SteamCommand.self]
     )
 }
 
@@ -30,6 +30,21 @@ extension Woven {
                 print("\(mark) \(check.title.padding(toLength: width, withPad: " ", startingAt: 0))  \(check.detail)")
             }
             if checks.contains(where: { $0.level == .fail }) { throw ExitCode(1) }
+        }
+    }
+}
+
+// MARK: - setup
+
+extension Woven {
+    struct Setup: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Install the engine build (runner, Steam bridge, hook, helpers) into Application Support."
+        )
+        @Option(help: "Runner id in the engine build.") var runner = "selfbuilt-cx26.3-r1"
+        func run() throws {
+            try WovenCore.Setup().run(runnerID: runner) { print($0) }
+            print("done; next: woven steam patch")
         }
     }
 }
@@ -251,8 +266,54 @@ extension Woven {
         static let configuration = CommandConfiguration(
             commandName: "steam",
             abstract: "macOS Steam integration.",
-            subcommands: [Status.self]
+            subcommands: [Status.self, Patch.self, Unpatch.self, Pin.self, Unpin.self, Log.self]
         )
+
+        struct Patch: ParsableCommand {
+            static let configuration = CommandConfiguration(
+                abstract: "Inject the WovenGames hook into /Applications/Steam.app (quits Steam).",
+                discussion: "Needs App Management permission for your terminal. Takes over a NotProton install."
+            )
+            func run() throws {
+                try SteamPatcher().patch { print($0) }
+                try SteamPatcher().pin()
+                print("Steam no longer updates at launch (`woven steam unpin` to allow it)")
+            }
+        }
+
+        struct Unpatch: ParsableCommand {
+            static let configuration = CommandConfiguration(abstract: "Remove the hook and restore Steam's Info.plist (quits Steam).")
+            func run() throws { try SteamPatcher().unpatch { print($0) } }
+        }
+
+        struct Pin: ParsableCommand {
+            static let configuration = CommandConfiguration(abstract: "Stop Steam from updating at launch.")
+            func run() throws {
+                try SteamPatcher().pin()
+                print("pinned")
+            }
+        }
+
+        struct Unpin: ParsableCommand {
+            static let configuration = CommandConfiguration(abstract: "Let Steam update again.")
+            func run() throws {
+                try SteamPatcher().unpin()
+                print("unpinned; Steam updates at its next launch")
+            }
+        }
+
+        struct Log: ParsableCommand {
+            static let configuration = CommandConfiguration(abstract: "Show the end of the hook's log.")
+            @Option(name: .shortAndLong, help: "Lines to show.") var lines = 40
+            func run() throws {
+                let url = Paths().hookLog
+                guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+                    print("no log yet at \(url.path(percentEncoded: false)) (start Steam once after `woven steam patch`)")
+                    return
+                }
+                print(text.split(separator: "\n", omittingEmptySubsequences: false).suffix(lines).joined(separator: "\n"))
+            }
+        }
 
         struct Status: ParsableCommand {
             static let configuration = CommandConfiguration(abstract: "Show Steam's build, hook and update pin.")

@@ -4,9 +4,12 @@ import Foundation
 
 public struct Paths: Sendable {
     public var home: URL
+    public var steamApp: URL
 
-    public init(home: URL = URL(filePath: NSHomeDirectory())) {
+    public init(home: URL = URL(filePath: NSHomeDirectory()),
+                steamApp: URL = URL(filePath: "/Applications/Steam.app")) {
         self.home = home
+        self.steamApp = steamApp
     }
 
     public var applicationSupport: URL { home.appending(path: "Library/Application Support") }
@@ -17,6 +20,8 @@ public struct Paths: Sendable {
     public var currentRunner: URL { runners.appending(path: "current") }
     public var prefixes: URL { support.appending(path: "prefixes") }
     public var logs: URL { support.appending(path: "logs") }
+    /// what the Steam hook logs (wovengames.dylib inside Steam)
+    public var hookLog: URL { support.appending(path: "wovengames.log") }
 
     public func prefix(named name: String) -> URL { prefixes.appending(path: name) }
 
@@ -26,12 +31,12 @@ public struct Paths: Sendable {
     // NotProton's own install, which M3 takes over
     public var notProtonSupport: URL { applicationSupport.appending(path: "notproton") }
 
-    public var steam: SteamPaths { SteamPaths(home: home) }
+    public var steam: SteamPaths { SteamPaths(home: home, app: steamApp) }
 }
 
 public struct SteamPaths: Sendable {
     public var home: URL
-    public var app = URL(filePath: "/Applications/Steam.app")
+    public var app: URL
 
     public var infoPlist: URL { app.appending(path: "Contents/Info.plist") }
     public var userData: URL { home.appending(path: "Library/Application Support/Steam") }

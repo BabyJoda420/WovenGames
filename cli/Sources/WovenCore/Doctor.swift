@@ -57,15 +57,16 @@ public enum Doctor {
                 add(.info, "  Pending update", "build \(pending) is downloaded but not applied yet")
             }
             switch steam.injection {
-            case .none: add(.info, "  Steam Play hook", "not installed (M3: `woven steam patch`)")
+            case .none: add(.info, "  Steam Play hook", "not installed (`woven setup`, then `woven steam patch`)")
             case .wovenGames: add(.ok, "  Steam Play hook", "WovenGames")
-            case .notProton: add(.info, "  Steam Play hook", "NotProton is installed; WovenGames will take it over in M3")
+            case .notProton: add(.info, "  Steam Play hook", "NotProton is installed; `woven steam patch` takes it over")
             case .other(let lib): add(.warn, "  Steam Play hook", "unknown library injected: \(lib)")
             }
             switch steam.pin {
-            case .full: add(.ok, "  Update pin", "BootStrapperInhibitAll (client updates blocked)")
-            case .onLaunchOnly: add(.warn, "  Update pin", "only BootStrapperInhibitUpdateOnLaunch; Steam can still update while running and break the hook")
-            case .none: add(.info, "  Update pin", "none")
+            case .full: add(.warn, "  Update pin", "BootStrapperInhibitAll: Steam never updates, which can stop it from signing in; prefer `woven steam pin`")
+            case .onLaunchOnly: add(.ok, "  Update pin", "Steam does not update at launch")
+            case .none: add(steam.injection == .wovenGames ? .warn : .info, "  Update pin",
+                            "none; a Steam update can break the hook (`woven steam pin`)")
             }
         }
 

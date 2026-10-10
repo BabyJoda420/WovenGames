@@ -196,3 +196,95 @@ final class WineLaunchTests: XCTestCase {
         XCTAssertThrowsError(try prefixes.url(""))
     }
 }
+
+final class SteamPatcherTests: XCTestCase {
+    var home: URL!
+    var app: URL!
+    var patcher: SteamPatcher!
+
+    override func setUpWithError() throws {
+        let fm = FileManager.default
+        home = fm.temporaryDirectory.appending(path: "woven-home-\(UUID().uuidString)")
+        app = home.appending(path: "Applications/Steam.app")
+        try fm.createDirectory(at: app.appending(path: "Contents/MacOS"), withIntermediateDirectories: true)
+        // a real Mach-O for steam_osx and for the hook, so codesign has something to sign
+        let src = home.appending(path: "x.c")
+        try "int x(void){return 0;}\nint main(void){return 0;}\n".write(to: src, atomically: true, encoding: .utf8)
+        XCTAssertEqual(Shell.capture("/usr/bin/clang", ["-o", app.appending(path: "Contents/MacOS/steam_osx").path(percentEncoded: false), src.path(percentEncoded: false)]).status, 0)
+        let support = home.appending(path: "Library/Application Support/WovenGames")
+        try fm.createDirectory(at: support, withIntermediateDirectories: true)
+        XCTAssertEqual(Shell.capture("/usr/bin/clang", ["-dynamiclib", "-o", support.appending(path: "wovengames.dylib").path(percentEncoded: false), src.path(percentEncoded: false)]).status, 0)
+        let plist: [String: Any] = ["CFBundleIdentifier": "com.valvesoftware.steam", "CFBundleExecutable": "steam_osx",
+                                    "LSEnvironment": ["LC_ALL": "en_US.UTF-8"]]
+        try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+            .write(to: app.appending(path: "Contents/Info.plist"))
+        patcher = SteamPatcher(paths: Paths(home: home, steamApp: app))
+        patcher.manageSteamProcess = false
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: home)
+    }
+
+    func env() throws -> [String: Any] {
+        let data = try Data(contentsOf: app.appending(path: "Contents/Info.plist"))
+        let plist = try PropertyListSerialization.propertyList(from: data, format: nil) as! [String: Any]
+        return plist["LSEnvironment"] as? [String: Any] ?? [:]
+    }
+
+    func testPatchAndUnpatchRoundTrip() throws {
+        try patcher.patch()
+        XCTAssertEqual(try env()["DYLD_INSERT_LIBRARIES"] as? String, patcher.deployedDylib.path(percentEncoded: false))
+        XCTAssertEqual(try env()["LC_ALL"] as? String, "en_US.UTF-8")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: patcher.deployedDylib.path(percentEncoded: false)))
+        XCTAssertEqual(SteamStatus(paths: Paths(home: home, steamApp: app).steam).injection, .wovenGames)
+        // patching twice is fine and keeps the first (pristine) backup
+        try patcher.patch()
+
+        try patcher.unpatch()
+        XCTAssertNil(try env()["DYLD_INSERT_LIBRARIES"])
+        XCTAssertEqual(try env()["LC_ALL"] as? String, "en_US.UTF-8")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: patcher.deployedDylib.path(percentEncoded: false)))
+    }
+
+    func testTakesOverNotProtonAndUsesItsBackup() throws {
+        let fm = FileManager.default
+        let plistURL = app.appending(path: "Contents/Info.plist")
+        // NotProton's pristine backup, then NotProton's patched plist and dylib
+        let npBackups = home.appending(path: "Library/Application Support/notproton/backups")
+        try fm.createDirectory(at: npBackups, withIntermediateDirectories: true)
+        try fm.copyItem(at: plistURL, to: npBackups.appending(path: "Info.plist.before-notproton"))
+        let np = app.appending(path: "Contents/MacOS/notproton.dylib")
+        try fm.copyItem(at: home.appending(path: "Library/Application Support/WovenGames/wovengames.dylib"), to: np)
+        let patched: [String: Any] = ["CFBundleExecutable": "steam_osx",
+                                      "LSEnvironment": ["LC_ALL": "en_US.UTF-8", "DYLD_INSERT_LIBRARIES": np.path(percentEncoded: false)]]
+        try PropertyListSerialization.data(fromPropertyList: patched, format: .xml, options: 0).write(to: plistURL)
+
+        try patcher.patch()
+        XCTAssertFalse(fm.fileExists(atPath: np.path(percentEncoded: false)))
+        XCTAssertEqual(try env()["DYLD_INSERT_LIBRARIES"] as? String, patcher.deployedDylib.path(percentEncoded: false))
+        try patcher.unpatch()
+        // restored to the pre-NotProton plist, bundle id included
+        let restored = try PropertyListSerialization.propertyList(from: Data(contentsOf: plistURL), format: nil) as! [String: Any]
+        XCTAssertEqual(restored["CFBundleIdentifier"] as? String, "com.valvesoftware.steam")
+        XCTAssertNil(try env()["DYLD_INSERT_LIBRARIES"])
+    }
+
+    func testRefusesForeignInsert() throws {
+        let plistURL = app.appending(path: "Contents/Info.plist")
+        let foreign: [String: Any] = ["LSEnvironment": ["DYLD_INSERT_LIBRARIES": "/opt/other.dylib"]]
+        try PropertyListSerialization.data(fromPropertyList: foreign, format: .xml, options: 0).write(to: plistURL)
+        XCTAssertThrowsError(try patcher.patch())
+    }
+
+    func testPinKeepsOtherLines() throws {
+        let cfg = home.appending(path: "Library/Application Support/Steam/steam.cfg")
+        try FileManager.default.createDirectory(at: cfg.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "Foo=1\nBootStrapperInhibitAll=enable\n".write(to: cfg, atomically: true, encoding: .utf8)
+        try patcher.pin()
+        XCTAssertEqual(try String(contentsOf: cfg, encoding: .utf8), "Foo=1\nBootStrapperInhibitAll=enable\nBootStrapperInhibitUpdateOnLaunch=enable\n")
+        try patcher.pin()
+        try patcher.unpin()
+        XCTAssertEqual(try String(contentsOf: cfg, encoding: .utf8), "Foo=1\n")
+    }
+}

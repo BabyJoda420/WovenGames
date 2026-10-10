@@ -14,7 +14,7 @@ public struct SteamStatus: Sendable {
         case none
         /// BootStrapperInhibitAll: the client never updates
         case full
-        /// BootStrapperInhibitUpdateOnLaunch only: updates still come in while running
+        /// BootStrapperInhibitUpdateOnLaunch: no update at launch (NotProton's and our pin)
         case onLaunchOnly
     }
 

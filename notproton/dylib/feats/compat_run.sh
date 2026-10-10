@@ -1,5 +1,5 @@
 #!/bin/sh
-# notproton compatibility tool shim (CrossOver or a self-built Wine runner)
+# WovenGames compatibility tool shim (from NotProton) (CrossOver or a self-built Wine runner)
 set -e
 
 verb="$1"
@@ -26,7 +26,7 @@ done
 
 # Global defaults for every game: KEY=VALUE lines in global.env, same name rules as the
 # launch options; a game's own launch options win.
-global_env="$HOME/Library/Application Support/notproton/global.env"
+global_env="$HOME/Library/Application Support/WovenGames/global.env"
 if [ -r "$global_env" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
@@ -50,7 +50,7 @@ case "$verb" in
     ;;
 esac
 
-CX_ROOT="$HOME/Library/Application Support/notproton/runners/current"
+CX_ROOT="$HOME/Library/Application Support/WovenGames/runners/current"
 export CX_ROOT
 # cxcompatdb resolves its database through CX_HOME and logs an error for
 # every module loaded without it :(
@@ -77,14 +77,14 @@ msync_default=0
 [ "$runner_kind" = selfbuilt ] && msync_default=1
 
 if [ -n "$STEAM_COMPAT_DATA_PATH" ]; then
-  log="$STEAM_COMPAT_DATA_PATH/notproton-run.log"
+  log="$STEAM_COMPAT_DATA_PATH/wovengames-run.log"
 else
   log=/dev/null
 fi
 [ "$(stat -f %z "$log" 2>/dev/null || echo 0)" -gt 262144 ] \
   && : > "$log" || true
 {
-  echo "=== notproton run $(date) ==="
+  echo "=== wovengames run $(date) ==="
   echo "verb=$verb"
   echo "args:"; for a in "$@"; do echo "  [$a]"; done
   echo "cwd=$(pwd)"
@@ -148,11 +148,11 @@ refuse_foreign_prefix() {
   esac
   have=$(prefix_machine) || return 0
   [ "$have" = "$want" ] && return 0
-  echo "=== prefix ntdll is $have and this compatibility tool wants $want, rebuild the prefix in NotProton ===" >> "$log" 2>&1 || true
+  echo "=== prefix ntdll is $have and this compatibility tool wants $want, rebuild the prefix (woven prefix delete) ===" >> "$log" 2>&1 || true
 
   if [ "$verb" != run ]; then
     osascript >/dev/null 2>&1 <<APPLESCRIPT || true
-display alert "This game needs its prefix rebuilt" message "This game originally ran under $(tool_name "$have"), but $(tool_name "$want") is present now. The prefix needs to be rebuilt in NotProton in order to run the game. You will not lose game saves by rebuilding the prefix." as critical
+display alert "This game needs its prefix rebuilt" message "This game originally ran under $(tool_name "$have"), but $(tool_name "$want") is present now. The prefix needs to be rebuilt in WovenGames in order to run the game. You will not lose game saves by rebuilding the prefix." as critical
 APPLESCRIPT
   fi
   exit 1
@@ -307,15 +307,15 @@ if [ -n "$STEAM_COMPAT_DATA_PATH" ]; then
   export WINEPREFIX="$STEAM_COMPAT_DATA_PATH/pfx"
   mkdir -p "$WINEPREFIX"
   msync_from=launch-options
-  if [ -z "$WINEMSYNC" ] && [ -r "$STEAM_COMPAT_DATA_PATH/notproton-msync" ]; then
+  if [ -z "$WINEMSYNC" ] && [ -r "$STEAM_COMPAT_DATA_PATH/wovengames-msync" ]; then
     WINEMSYNC=$(tr -d ' \t\n' \
-      < "$STEAM_COMPAT_DATA_PATH/notproton-msync" 2>/dev/null || true)
+      < "$STEAM_COMPAT_DATA_PATH/wovengames-msync" 2>/dev/null || true)
     msync_from=carried-over
   fi
   [ -n "$WINEMSYNC" ] || msync_from=default
   export WINEMSYNC="${WINEMSYNC:-$msync_default}"
   printf '%s' "$WINEMSYNC" \
-    > "$STEAM_COMPAT_DATA_PATH/notproton-msync" 2>/dev/null || true
+    > "$STEAM_COMPAT_DATA_PATH/wovengames-msync" 2>/dev/null || true
   stage_step="prefix arch check"
   refuse_foreign_prefix
   echo "sync: WINEMSYNC=$WINEMSYNC from $msync_from" >> "$log" 2>&1 || true
@@ -338,13 +338,13 @@ if [ -n "$STEAM_COMPAT_DATA_PATH" ]; then
   "$WINELOADER" reg add 'HKLM\Software\Classes\steam\shell\open\command' /ve /t REG_SZ /d '"C:\Program Files (x86)\Steam\steam.exe" "%1"' /f >> "$log" 2>&1 || true
 fi
 
-bridge_src="$HOME/Library/Application Support/notproton/bridge"
+bridge_src="$HOME/Library/Application Support/WovenGames/bridge"
 prefix_steam="$WINEPREFIX/drive_c/Program Files (x86)/Steam"
 verify_runner() {
   if [ "$runner_kind" = selfbuilt ]; then
     :
   elif [ ! -d "$bridge_src/wine" ]; then
-    echo "=== no patched ntdll in the bridge, run NotProton ===" >> "$log" 2>&1 || true
+    echo "=== no patched ntdll in the bridge, run woven setup ===" >> "$log" 2>&1 || true
     return
   fi
   [ "$runner_kind" = selfbuilt ] || for arch in x86_64-windows i386-windows aarch64-windows; do
@@ -352,9 +352,9 @@ verify_runner() {
     live="$CX_ROOT/lib/wine/$arch/ntdll.dll"
     [ -f "$staged" ] || continue
     if [ ! -f "$live" ]; then
-      echo "=== runner has no $arch ntdll, set up the runner in NotProton ===" >> "$log" 2>&1 || true
+      echo "=== runner has no $arch ntdll, run woven setup ===" >> "$log" 2>&1 || true
     elif ! cmp -s "$staged" "$live"; then
-      echo "=== runner $arch ntdll is not the patched copy, set up the runner in NotProton ===" >> "$log" 2>&1 || true
+      echo "=== runner $arch ntdll is not the patched copy, run woven setup ===" >> "$log" 2>&1 || true
     fi
   done
   for arch in i386-windows x86_64-windows "${wine_unix##*/}"; do
@@ -363,7 +363,7 @@ verify_runner() {
       *) name="lsteamclient.dll" ;;
     esac
     [ -f "$CX_ROOT/lib/wine/$arch/$name" ] && continue
-    echo "=== runner is missing $arch/$name, set up the runner in NotProton ===" >> "$log" 2>&1 || true
+    echo "=== runner is missing $arch/$name, run woven setup ===" >> "$log" 2>&1 || true
   done
 }
 install_lsteamclient_trigger() {
@@ -451,7 +451,7 @@ fi
 # Graphics backend. CX_GRAPHICS_BACKEND (the options panel's launch option) wins; otherwise a
 # self-built runner picks by what the game's binaries import: Direct3D 12 -> D3DMetal,
 # Direct3D 10/11 -> DXMT, anything else -> wined3d. CrossOver runners keep their own logic.
-pe_d3d="$HOME/Library/Application Support/notproton/pe-d3d"
+pe_d3d="$HOME/Library/Application Support/WovenGames/pe-d3d"
 detect_d3d() {
   [ -x "$pe_d3d" ] && [ -d "$STEAM_COMPAT_INSTALL_PATH" ] || { echo none; return; }
   # A game that ships Microsoft's D3D12 Agility SDK renders with Direct3D 12.
@@ -550,14 +550,14 @@ if [ "${MTL_HUD_ENABLED:-0}" = 1 ]; then
   export MTL_HUD_OPACITY="${MTL_HUD_OPACITY:-0.85}"
   export MTL_HUD_ELEMENTS="${MTL_HUD_ELEMENTS:-fps,frameinterval,gputime,presentdelay,layersize,memory,fpsgraph}"
   echo "hud: $MTL_HUD_ALIGNMENT scale=$MTL_HUD_SCALE elements=$MTL_HUD_ELEMENTS" >> "$log" 2>&1 || true
-  syshud="$HOME/Library/Application Support/notproton/syshud"
+  syshud="$HOME/Library/Application Support/WovenGames/syshud"
   if [ "${NOTPROTON_SYSHUD:-1}" = 1 ] && [ -x "$syshud" ] && [ "$verb" != run ]; then
     rows=$(printf '%s' "$MTL_HUD_ELEMENTS" | tr ',' '\n' | grep -c .)
     case ",$MTL_HUD_ELEMENTS," in *graph*|*histogram*) rows=$((rows + 3)) ;; esac
     wine_label="$(sed -n 's/.*"wine": "\(.*\)".*/\1/p' "$CX_ROOT/runner.json" 2>/dev/null) ($(readlink "$CX_ROOT" 2>/dev/null || echo runner))"
     "$syshud" --offset "${NOTPROTON_SYSHUD_OFFSET:-$((14 + rows * 14))}" \
       --label "Wine: $wine_label" --label "Graphics: ${backend:-${CX_ACTIVE_GRAPHICS_BACKEND:-?}} (Rosetta)" \
-      --pid $$ --app "com.notproton.launcher.$app_id" >> "$log" 2>&1 &
+      --pid $$ --app "com.wovengames.launcher.$app_id" >> "$log" 2>&1 &
     syshud_pid=$!
   fi
 fi
@@ -589,7 +589,7 @@ while [ -n "$client_root" ] && [ "$client_root" != "/" ] && [ ! -d "$client_root
   client_root=$(dirname "$client_root")
 done
 # Icon stuff
-appinfo_tool="$HOME/Library/Application Support/notproton/appinfo"
+appinfo_tool="$HOME/Library/Application Support/WovenGames/appinfo"
 appinfo_vdf="$client_root/appcache/appinfo.vdf"
 meta_name=""
 meta_icon=""
@@ -609,7 +609,7 @@ fi
 # shellcheck disable=SC1003 # the pair deletes a literal backslash, not a quote
 bundle_name=$(printf '%s' "$game_name" | tr -d '/:"`$\\')
 game_name_xml=$(printf '%s' "$game_name" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')
-loader_root="$HOME/Library/Application Support/notproton/launchers/$app_id"
+loader_root="$HOME/Library/Application Support/WovenGames/launchers/$app_id"
 mkdir -p "$loader_root"
 loader_app="$loader_root/$bundle_name.app"
 rm -rf "$loader_root"/*.app
@@ -621,7 +621,7 @@ mkdir -p "$loader_macos" "$loader_res"
 icon_arg=""
 resolve_icon() {
   set +e
-  iconmaker="$HOME/Library/Application Support/notproton/iconmaker"
+  iconmaker="$HOME/Library/Application Support/WovenGames/iconmaker"
   art_dir="$client_root/appcache/librarycache/$app_id"
   art=""
   if [ -n "$meta_clienticon" ]; then
@@ -673,13 +673,13 @@ resolve_icon() {
     icon_source="$art $(stat -f %m "$art" 2>/dev/null || echo 0)"
   fi
   icon_cache="$loader_root/game.icns"
-  if [ -n "$art" ] && [ -s "$icon_cache" ] &&   [ "$(cat "$loader_root/notproton-icon.source" 2>/dev/null)" =   "$icon_source" ] && cp -f "$icon_cache" "$loader_res/game.icns"; then
+  if [ -n "$art" ] && [ -s "$icon_cache" ] &&   [ "$(cat "$loader_root/wovengames-icon.source" 2>/dev/null)" =   "$icon_source" ] && cp -f "$icon_cache" "$loader_res/game.icns"; then
     icon_arg="  <key>CFBundleIconFile</key><string>game</string>"
     echo "icon reused from $art" >> "$log" 2>&1 || true
   elif [ -n "$art" ] && [ -x "$iconmaker" ]; then
     if "$iconmaker" "$art" "$icon_cache" >> "$log" 2>&1 &&   cp -f "$icon_cache" "$loader_res/game.icns"; then
       icon_arg="  <key>CFBundleIconFile</key><string>game</string>"
-      printf '%s\n' "$icon_source" > "$loader_root/notproton-icon.source"
+      printf '%s\n' "$icon_source" > "$loader_root/wovengames-icon.source"
       echo "icon built from $art" >> "$log" 2>&1 || true
     elif [ "$art" = "$ico" ]; then
       # A cached .ico that iconmaker rejects is corrupt and passes the size
@@ -706,7 +706,7 @@ cat > "$loader_contents/Info.plist" <<PLIST
 <dict>
   <key>CFBundleName</key><string>$game_name_xml</string>
   <key>CFBundleDisplayName</key><string>$game_name_xml</string>
-  <key>CFBundleIdentifier</key><string>com.notproton.launcher.$app_id</string>
+  <key>CFBundleIdentifier</key><string>com.wovengames.launcher.$app_id</string>
   <key>CFBundleExecutable</key><string>launcher</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
@@ -740,9 +740,9 @@ cat > "$loader_macos/launcher" <<LAUNCHER
 #!/bin/sh
 export WINELOADER="$WINELOADER"
 export DYLD_FALLBACK_LIBRARY_PATH="$CX_ROOT/lib:/usr/local/lib:/usr/lib"
-wine_log="$loader_root/notproton-wine.log"
+wine_log="$loader_root/wovengames-wine.log"
 exec > "\$wine_log" 2>&1
-shim="$HOME/Library/Application Support/notproton/overlay-shim.dylib"
+shim="$HOME/Library/Application Support/WovenGames/overlay-shim.dylib"
 if [ -n "\$STEAM_DYLD_INSERT_LIBRARIES" ]; then
   if [ -f "\$shim" ]; then
     export DYLD_INSERT_LIBRARIES="\$shim:\$STEAM_DYLD_INSERT_LIBRARIES"
