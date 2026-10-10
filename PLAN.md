@@ -75,9 +75,17 @@ woven steam pin|unpin             # writes or removes steam.cfg
 | M0 | Repo scaffold: git, GPL-3, NOTICE/attribution, fork imports at pinned commits (UPSTREAM.md) | ✅ done |
 | M1 | **Engine**: build the runner locally (~20–30 min, ~15 GB) | ✅ done: `tests/probe-backends.sh` passes all backends on an M4 |
 | M2 | **CLI**: `woven` with doctor/runner/prefix/backend/run | ✅ done: d3dprobe runs via `woven run`, auto backend |
-| M3 | **Steam integration**: patch, pin, register the compat tool, rename notproton→wovengames (paths, tool name, dylib) | **a Windows game installs and plays from macOS Steam's own buttons** (first: Billie's Wheelie, app 3180310; Expedition 33 once there is ~55 GB free) |
+| M3 | **Steam integration**: patch, pin, register the compat tool, rename notproton→wovengames (paths, tool name, dylib) | ✅ done 2026-10-10: Billie's Wheelie (Unity, app 3180310) installs and plays from macOS Steam on DXMT, Steam build 1788652215. Expedition 33 still to do once ~55 GB is free |
 | M4 | **App**: SwiftUI onboarding (permissions, D3DMetal import, Steam patch), per-game settings, one-click uninstall that restores Steam | a non-technical user can set it up |
 | M5 | **Distribution**: CI builds the runner and app and publishes Releases, so users never compile; Steam-build tracking | download, open, play |
+
+### Notes for M4 (from M3 testing)
+
+- macOS Steam runs a `KEY=value` placed *before* `%command%` as the program ("OS Error 260"). Options must come after it:
+  `%command% MTL_HUD_ENABLED=1`. The app's per-game settings should write them in that form, or the hook should rewrite them.
+- The Makefile still builds `out/notproton.dylib`, and `woven setup` installs it as `wovengames.dylib`. Rename the build target too.
+- The `NOTPROTON_*` launch-option variables (`NOTPROTON_RETINA`, `NOTPROTON_SYSHUD`, ...) still carry the old name. Add `WOVEN_*` aliases.
+- The hook logs `rtti: no unique type name ...CompatManager_GetCompatTools...` on build 1788652215. Harmless so far, but watch it ([NotProton#92](https://github.com/NotProtonNot/NotProton/issues/92)).
 
 ## 5. Things you'll need to do yourself (I can't do these for you)
 
