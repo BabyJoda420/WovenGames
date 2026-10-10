@@ -28,7 +28,12 @@ fetch_package() { # file sha
 while read -r kind id file sha; do
     [ "$kind" = package ] || continue
     fetch_package "$file" "$sha"
-    rm -rf "$CACHE/x-$id" && mkdir -p "$CACHE/x-$id" && unzip -q -o "$CACHE/$file" -d "$CACHE/x-$id"
+    rm -rf "$CACHE/x-$id" && mkdir -p "$CACHE/x-$id"
+    # WovenGames: the Linux package carries symlinks named with backslashes
+    # (legacycompat\steamclient64.dll) that unzip cannot always create. The bridge takes the
+    # real files they point at, and every file used below is checked against its pinned hash,
+    # so a failed symlink entry is harmless.
+    unzip -q -o "$CACHE/$file" -d "$CACHE/x-$id" || echo "unzip: some entries of $file were skipped" >&2
 done < <(grep '^package ' "$MANIFEST")
 
 while read -r kind bridge pkg inner sha; do

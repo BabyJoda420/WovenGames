@@ -142,5 +142,7 @@ build_ffmpeg() {
 
 ALL=(gmp nettle gnutls freetype sdl2 moltenvk ffmpeg)
 for c in "${@:-${ALL[@]}}"; do "build_$c"; done
+# WovenGames: lets build-all.sh skip this step on a rerun (only a full build counts)
+[ $# -gt 0 ] || touch "$PREFIX/.complete"
 log "done: $PREFIX"
 find "$PREFIX/lib" -maxdepth 1 -name '*.dylib' -type f -exec sh -c 'printf "%s  %s\n" "$(lipo -archs "$1")" "$(basename "$1")"' _ {} \;

@@ -67,7 +67,9 @@ step "Wine sources (CrossOver 26.3.0 + patches/series + lsteamclient)"
 [ -d "$ROOT/src/wine/.git" ] || run prepare "$ROOT/scripts/prepare-wine-src.sh"
 
 step "x86_64 host libraries (gmp, nettle, gnutls, freetype, SDL2, MoltenVK, FFmpeg)"
-run deps "$ROOT/scripts/build-deps.sh"
+# WovenGames: build-deps.sh rebuilds every library from scratch; skip it once it has finished.
+if [ -f "$ROOT/build/deps/.complete" ]; then echo "(already built; delete build/deps/.complete to rebuild)"
+else run deps "$ROOT/scripts/build-deps.sh"; fi
 
 step "Wine (native tools, then the x86_64 runner build; this is the long one)"
 run wine "$ROOT/scripts/build-wine.sh"
