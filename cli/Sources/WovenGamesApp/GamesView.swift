@@ -20,7 +20,7 @@ struct GamesView: View {
                 if model.games.isEmpty {
                     ContentUnavailableView("No Windows games installed",
                                            systemImage: "gamecontroller",
-                                           description: Text("Install one from Steam after forcing WovenGames under Properties → Compatibility."))
+                                           description: Text("Install a Windows game in Steam; it runs through WovenGames automatically."))
                 }
             }
 

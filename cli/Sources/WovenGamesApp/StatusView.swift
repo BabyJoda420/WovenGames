@@ -96,7 +96,7 @@ struct StatusView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(model.isReady ? "Ready to play" : "A few steps left").font(.title2.bold())
                 Text(model.isReady
-                     ? "In Steam, open a Windows game's Properties → Compatibility, force WovenGames, then Install and Play."
+                     ? "Windows games in Steam now show Install and Play. WovenGames is the default for every Windows-only game; another tool can still be chosen under a game's Properties → Compatibility."
                      : "Install the engine, then patch Steam. Patching needs App Management permission for WovenGames.")
                     .foregroundStyle(.secondary)
             }

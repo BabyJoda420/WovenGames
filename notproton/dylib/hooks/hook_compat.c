@@ -61,7 +61,7 @@ static void *orig_FindToolForTargetApp = NULL;
 typedef void *(*fn_FindToolForTargetApp)(void *self, uint32_t appid);
 
 // An unmapped windows-only app resolves to no tool ("Install on Windows").
-// Those are defaulted to CrossOver for quality UX.
+// Those are defaulted to the WovenGames tool for quality UX.
 static void *hook_FindToolForTargetApp(void *self, uint32_t appid) {
     fn_FindToolForTargetApp orig = (fn_FindToolForTargetApp)orig_FindToolForTargetApp;
     if (!orig) {
@@ -84,7 +84,7 @@ static void *hook_FindToolForTargetApp(void *self, uint32_t appid) {
 
     void *crossover = np_compat_registered_tool(self);
     if (crossover)
-        NP_DBG("hook_FindToolForTargetApp: appID %u is windows-only, defaulting to CrossOver tool",
+        NP_DBG("hook_FindToolForTargetApp: appID %u is windows-only, defaulting to WovenGames",
                appid);
     return crossover;
 }
