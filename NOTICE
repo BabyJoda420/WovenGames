@@ -1,0 +1,21 @@
+WovenGames licensing
+====================
+
+WovenGames as a whole is licensed under the GNU General Public License v3.0 (see LICENSE).
+
+It is built on two GPL-3.0 projects (see UPSTREAM.md):
+  - NotProton by NotProtonNot, and its selfbuilt-wine fork by Drustburn  -> notproton/
+  - steamplay-mac by Drustburn                                            -> engine/
+
+Parts that are not GPL keep their own licenses. notproton/NOTICE lists them:
+  - lsteamclient: Steamworks SDK License (Valve)
+  - steam-shim: BSD-3-Clause (port of Proton 9's steam_helper, Valve)
+  - fonts from Valve's Proton: their original licenses
+  - cJSON, JsonCpp: MIT / public domain
+
+The following are downloaded at build or install time, checked against pinned hashes,
+and NEVER committed to this repository:
+  - CrossOver Wine sources (LGPL-2.1, CodeWeavers)
+  - Valve's Windows Steam binaries (steamclient(64).dll and others, Valve's CDN)
+  - Apple D3DMetal from Game Porting Toolkit 3.0 (Apple license: personal, non-commercial)
+  - DXMT (MIT), MoltenVK (Apache-2.0), SDL2 (zlib), FFmpeg (LGPL), wine-mono, wine-gecko
