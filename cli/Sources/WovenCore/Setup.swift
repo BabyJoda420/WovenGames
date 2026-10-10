@@ -35,6 +35,8 @@ public struct EngineBuild: Sendable {
     var signatures: URL { root.appending(path: "notproton/signatures/macos.arm64") }
     var versionHeader: URL { root.appending(path: "notproton/dylib/version.h") }
     var dist: URL { root.appending(path: "dist/runners") }
+    /// the repo's compat/ next to engine/ (resolve the cache symlink first, so ".." is the repo)
+    var compatDatabase: URL { root.resolvingSymlinksInPath().deletingLastPathComponent().appending(path: "compat") }
 }
 
 public struct Setup: Sendable {
@@ -100,6 +102,12 @@ public struct Setup: Sendable {
             .map(String.init) ?? "unknown"
         try (version + "\n").write(to: paths.support.appending(path: "dylib.version"), atomically: true, encoding: .utf8)
         log("hook \(version) and helpers: \(paths.support.path(percentEncoded: false))")
+
+        let compat = paths.support.appending(path: "compat")
+        try fm.createDirectory(at: compat, withIntermediateDirectories: true)
+        let entries = ((try? fm.contentsOfDirectory(atPath: engine.compatDatabase.path(percentEncoded: false))) ?? []).filter { $0.hasSuffix(".env") }
+        for name in entries { try place(engine.compatDatabase.appending(path: name), compat.appending(path: name)) }
+        log("compat database: \(entries.count) game(s)")
     }
 
     func require(_ url: URL, _ what: String, _ hint: String) throws {

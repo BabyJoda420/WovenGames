@@ -23,6 +23,8 @@ public struct GameSettings: Equatable, Sendable {
     public var metalHUD = false
     public var msync = true
     public var retina = false
+    /// extra arguments for the game itself, e.g. "-dx11"
+    public var gameArgs = ""
     /// lines for keys this type does not manage, kept verbatim
     public var otherLines: [String] = []
 
@@ -30,6 +32,7 @@ public struct GameSettings: Equatable, Sendable {
     static let hudKey = "MTL_HUD_ENABLED"
     static let msyncKey = "WINEMSYNC"
     static let retinaKey = "NOTPROTON_RETINA"
+    static let argsKey = "WOVEN_GAME_ARGS"
 
     public init() {}
 
@@ -45,7 +48,7 @@ public struct GameSettings: Equatable, Sendable {
     public init(parsing text: String) {
         for raw in text.split(whereSeparator: \.isNewline) {
             let line = raw.trimmingCharacters(in: .whitespaces)
-            guard !line.isEmpty else { continue }
+            guard !line.isEmpty, !line.hasPrefix("#") else { continue }
             let parts = line.split(separator: "=", maxSplits: 1).map(String.init)
             let key = parts[0], value = parts.count > 1 ? parts[1] : ""
             switch key {
@@ -53,6 +56,7 @@ public struct GameSettings: Equatable, Sendable {
             case Self.hudKey: metalHUD = value == "1"
             case Self.msyncKey: msync = value != "0"
             case Self.retinaKey: retina = value == "1"
+            case Self.argsKey: gameArgs = value
             default: otherLines.append(line)
             }
         }
@@ -65,8 +69,28 @@ public struct GameSettings: Equatable, Sendable {
         if metalHUD { lines.append("\(Self.hudKey)=1") }
         if !msync { lines.append("\(Self.msyncKey)=0") }
         if retina { lines.append("\(Self.retinaKey)=1") }
+        let args = gameArgs.trimmingCharacters(in: .whitespaces)
+        if !args.isEmpty { lines.append("\(Self.argsKey)=\(args)") }
         lines += otherLines
         return lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
+    }
+
+    /// Known-good defaults shipped with WovenGames (compat/<appid>.env), if any.
+    public static func recommended(appID: String, paths: Paths = Paths()) -> GameSettings? {
+        let url = paths.support.appending(path: "compat/\(appID).env")
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        return GameSettings(parsing: text)
+    }
+
+    /// One line for the UI, e.g. "DXMT · -dx11".
+    public var summary: String {
+        var parts: [String] = []
+        if backend != .auto { parts.append(backend.label.components(separatedBy: " (").first ?? backend.rawValue) }
+        if !gameArgs.isEmpty { parts.append(gameArgs) }
+        if metalHUD { parts.append("HUD") }
+        if retina { parts.append("Retina") }
+        if !msync { parts.append("msync off") }
+        return parts.isEmpty ? "defaults" : parts.joined(separator: " · ")
     }
 
     public func save(appID: String, paths: Paths = Paths()) throws {

@@ -15,7 +15,7 @@ while [ "$argi" -lt "$argc" ]; do
   arg="$1"
   shift
   case "$arg" in
-    CX_GRAPHICS*=*|D3DM_*=*|DXMT_*=*|DXVK_*=*|MTL_*=*|NOTPROTON_*=*|ROSETTA_*=*|WINE*=*)
+    CX_GRAPHICS*=*|D3DM_*=*|DXMT_*=*|DXVK_*=*|MTL_*=*|NOTPROTON_*=*|ROSETTA_*=*|WINE*=*|WOVEN_*=*)
       # shellcheck disable=SC2163 # arg is a NAME=VALUE pair, which export takes as an assignment
       export "$arg"
       launch_env="$launch_env $arg"
@@ -32,7 +32,7 @@ global_env="$HOME/Library/Application Support/WovenGames/global.env"
 if [ -r "$global_env" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
-      CX_GRAPHICS*=*|D3DM_*=*|DXMT_*=*|DXVK_*=*|MTL_*=*|NOTPROTON_*=*|ROSETTA_*=*|WINE*=*)
+      CX_GRAPHICS*=*|D3DM_*=*|DXMT_*=*|DXVK_*=*|MTL_*=*|NOTPROTON_*=*|ROSETTA_*=*|WINE*=*|WOVEN_*=*)
         name=${line%%=*}
         eval "isset=\${$name+x}"
         # shellcheck disable=SC2154 # eval assigns isset on the line above
@@ -122,22 +122,26 @@ case "$app_id" in ''|0) app_id=$(basename "$STEAM_COMPAT_DATA_PATH" 2>/dev/null)
 case "$app_id" in ''|*[!0-9]*) app_id=0 ;; esac
 echo "app_id=$app_id (STEAM_COMPAT_APP_ID=$STEAM_COMPAT_APP_ID)" >> "$log" 2>&1 || true
 
-# WovenGames: per-game settings from the app, games/<appid>.env, same name rules as the launch
-# options. They override global.env; the game's own launch options still win.
-game_env="$HOME/Library/Application Support/WovenGames/games/$app_id.env"
-if [ "$app_id" != 0 ] && [ -r "$game_env" ]; then
+# WovenGames: per-game settings, same name rules as the launch options. Later files win:
+#   compat/<appid>.env  known-good defaults shipped with WovenGames (woven setup installs them)
+#   games/<appid>.env   the user's own settings from the app
+# Both override global.env; the game's own launch options always win.
+load_game_env() { # file label
+  [ "$app_id" != 0 ] && [ -r "$1" ] || return 0
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
-      CX_GRAPHICS*=*|D3DM_*=*|DXMT_*=*|DXVK_*=*|MTL_*=*|NOTPROTON_*=*|ROSETTA_*=*|WINE*=*)
+      CX_GRAPHICS*=*|D3DM_*=*|DXMT_*=*|DXVK_*=*|MTL_*=*|NOTPROTON_*=*|ROSETTA_*=*|WINE*=*|WOVEN_*=*)
         case " $launch_names " in *" ${line%%=*} "*) continue ;; esac
         # shellcheck disable=SC2163 # line is a NAME=VALUE pair
         export "$line"
         launch_env="$launch_env $line"
-        echo "game setting: $line" >> "$log" 2>&1 || true
+        echo "$2: $line" >> "$log" 2>&1 || true
         ;;
     esac
-  done < "$game_env"
-fi
+  done < "$1"
+}
+load_game_env "$HOME/Library/Application Support/WovenGames/compat/$app_id.env" "compat default"
+load_game_env "$HOME/Library/Application Support/WovenGames/games/$app_id.env" "game setting"
 
 [ -n "$SteamAppId" ] || export SteamAppId="$app_id"
 [ -n "$SteamGameId" ] || export SteamGameId="$app_id"
@@ -855,6 +859,15 @@ if [ -n "$STEAM_DYLD_INSERT_LIBRARIES" ]; then
   echo "=== overlay injected from $STEAM_DYLD_INSERT_LIBRARIES ===" >> "$log" 2>&1 || true
 else
   echo "=== client staged no overlay renderer, overlay disabled ===" >> "$log" 2>&1 || true
+fi
+# WovenGames: extra game arguments from the settings above (e.g. -dx11), unless already given
+if [ -n "$WOVEN_GAME_ARGS" ]; then
+  for extra in $WOVEN_GAME_ARGS; do
+    have=0
+    for a in "$@"; do [ "$a" = "$extra" ] && have=1; done
+    [ "$have" = 1 ] || set -- "$@" "$extra"
+  done
+  echo "game args added: $WOVEN_GAME_ARGS" >> "$log" 2>&1 || true
 fi
 set -- --args "$shim_exe" "$@"
 for name in $(env | sed -nE 's/^(Steam[A-Za-z0-9]*|WINEDLLPATH_PREPEND|(CX_GRAPHICS|CX_ACTIVE_GRAPHICS|CX_APPLEGPTK_|D3DM_|DXMT_|DXVK_|MTL_|ROSETTA_)[A-Z0-9_]*)=.*/\1/p'); do

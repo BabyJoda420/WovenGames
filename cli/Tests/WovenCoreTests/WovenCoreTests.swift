@@ -386,3 +386,14 @@ extension SteamPatcherTests {
         XCTAssertTrue(patcher.deployedHookIsCurrent)
     }
 }
+
+extension LibraryTests {
+    func testCompatEntryParses() throws {
+        let url = URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../../compat/1874000.env").standardizedFileURL
+        let s = GameSettings(parsing: try String(contentsOf: url, encoding: .utf8))
+        XCTAssertEqual(s.backend, .dxmt)
+        XCTAssertEqual(s.gameArgs, "-dx11")
+        XCTAssertEqual(s.otherLines, [])
+        XCTAssertEqual(s.summary, "DXMT · -dx11")
+    }
+}

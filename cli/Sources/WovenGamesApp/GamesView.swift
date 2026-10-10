@@ -46,6 +46,7 @@ struct GameDetailView: View {
     let game: InstalledGame
     @State private var settings = GameSettings()
     @State private var detected: BackendDetection?
+    @State private var recommended: GameSettings?
     @State private var lastRun: LastRun?
     @State private var saveError: String?
     @State private var confirmReset = false
@@ -61,6 +62,11 @@ struct GameDetailView: View {
             }
 
             Section("Graphics") {
+                if let recommended {
+                    LabeledContent("WovenGames recommends") {
+                        Text(recommended.summary)
+                    }
+                }
                 Picker("Backend", selection: $settings.backend) {
                     ForEach(GameSettings.BackendChoice.allCases) { Text($0.label).tag($0) }
                 }
@@ -81,6 +87,7 @@ struct GameDetailView: View {
             }
 
             Section("Advanced") {
+                TextField("Game arguments", text: $settings.gameArgs, prompt: Text(recommended?.gameArgs.isEmpty == false ? recommended!.gameArgs : "e.g. -dx11"))
                 Toggle("msync (faster thread synchronisation)", isOn: $settings.msync)
                 if let problem = lastRun?.problem {
                     Label(problem, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
@@ -102,13 +109,14 @@ struct GameDetailView: View {
                         .disabled(!FileManager.default.fileExists(atPath: game.prefix.path(percentEncoded: false)))
                 }
             } footer: {
-                Text("Settings apply at the next launch from Steam. Launch options set in Steam win over these.")
+                Text("Settings apply at the next launch from Steam. Your settings win over WovenGames' recommendations, and launch options set in Steam win over both.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
         .task {
             settings = GameSettings.load(appID: game.appID)
+            recommended = GameSettings.recommended(appID: game.appID)
             lastRun = SteamLibrary.lastRun(of: game)
             let dir = game.installDir
             detected = await Task.detached { BackendDetector.detect(launchTarget: nil, installDir: dir) }.value
