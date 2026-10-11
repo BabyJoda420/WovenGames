@@ -1,7 +1,8 @@
 # Daily: checks Valve's newest public and beta macOS Steam builds against the hook's
-# signatures (engine/scripts/check-steam-build.sh, no Steam needed) and opens a pull request
-# that records every new build in compat/steam-builds.json. Merged, the result reaches every
-# WovenGames app right away (the app reads that file from GitHub).
+# signatures (engine/scripts/check-steam-build.sh, no Steam needed) and records every new build
+# in compat/steam-builds.json on main. The result reaches every WovenGames app right away (the
+# app reads that file from GitHub). A build that breaks the hook also opens an issue.
+# Commits and issues need no repository setting; pull requests from Actions would.
 name: Steam watch
 
 on:
@@ -11,7 +12,7 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
+  issues: write
 
 jobs:
   check:
@@ -60,18 +61,20 @@ jobs:
           EOF
           cat summary.md
 
-      - name: Open a pull request
+      - name: Commit to main
         if: ${{ steps.record.outputs.count != '0' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
+          git add compat/steam-builds.json
+          git commit -m "steam-builds: record new Steam builds" -m "$(cat summary.md)"
+          # main may have moved while the check ran
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Open an issue for a breaking build
+        if: ${{ steps.record.outputs.broken != '0' && steps.record.outputs.count != '0' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          branch="steam-watch/$(date -u +%Y%m%d)"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
-          git switch -c "$branch"
-          git add compat/steam-builds.json
-          git commit -m "steam-builds: record new Steam builds" -m "$(cat summary.md)"
-          git push -u origin "$branch"
-          title="New Steam builds checked"
-          [ "${{ steps.record.outputs.broken }}" != "0" ] && title="New Steam build breaks the hook"
-          gh pr create --title "$title" --body "$(printf 'Found by the daily Steam watch.\n\n%s\n\nUnresolved signatures mean the hook needs new signatures before users update Steam.\n' "$(cat summary.md)")"
+          gh issue create --title "New Steam build breaks the hook" --body "$(printf 'Found by the daily Steam watch.\n\n%s\n\nUnresolved signatures mean the hook needs new signatures. The app already warns users to keep Steam on their current build.\n' "$(cat summary.md)")"
