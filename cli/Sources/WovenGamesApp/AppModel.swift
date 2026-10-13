@@ -11,7 +11,7 @@ final class AppModel {
     var checks: [Check] = []
     var steam: SteamStatus?
     var games: [InstalledGame] = []
-    /// bumped on every refresh, so views can re-read things (launch logs) that change while games stay the same
+    /// bumped on every refresh and when a game quits, so views can re-read things (launch logs) that change while games stay the same
     var generation = 0
     var runner: Runner?
     /// a built engine waiting to be installed (Library/Developer/WovenGames/engine)
@@ -31,12 +31,56 @@ final class AppModel {
 
     let paths = Paths()
 
+    /// CFBundleShortVersionString; "0.0.0" when running outside an app bundle (swift run)
+    let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
+
+    // MARK: games (AppModel+Games.swift)
+
+    /// app IDs of games running now: their launcher app is open, or their run script is alive
+    var runningGames: Set<String> = []
+    /// a game a notification asked to show; the Games page selects it, then sets this back to nil
+    var requestedGame: String?
+    /// launch findings per app ID, worst first; nil for a game not diagnosed yet (see findings(for:))
+    var launchFindings: [String: [LaunchFinding]] = [:]
+    @ObservationIgnored var findingsInFlight: Set<String> = []
+    @ObservationIgnored var workspaceObservers: [NSObjectProtocol] = []
+    @ObservationIgnored var notificationRouter: NotificationRouter?
+    /// set by the app scene to its openWindow(id: "main"), so a notification can reopen a closed window
+    @ObservationIgnored var openMainWindow: (@MainActor () -> Void)?
+
+    // MARK: updates (AppModel+Updates.swift)
+
+    /// a newer WovenGames release for this Mac (betas only with "includeBetas")
+    var availableUpdate: GitHubRelease?
+    var checkingForUpdates = false
+    /// when the last update check succeeded
+    var lastUpdateCheck: Date?
+    @ObservationIgnored var updateLoop: Task<Void, Never>?
+    @ObservationIgnored var recommendationSync: Task<Void, Never>?
+
+    // MARK: settings (AppModel+Settings.swift)
+
+    /// what global.env holds; read at refresh, written through fpsOverlay
+    var fpsOverlayValue = false
+    @ObservationIgnored var fpsOverlayWrite: Task<Void, Never>?
+
+    init() {
+        UserDefaults.standard.register(defaults: Setting.defaults)
+        appLog("WovenGames \(appVersion) started")
+        observeLaunchers()
+        setUpNotifications()
+        startUpdateLoop()
+    }
+
     var isReady: Bool {
         runner != nil && steam?.injection == .wovenGames
     }
 
     func refresh() async {
         let paths = paths
+        syncRecommendationsQuietly()
+        // a pending write would otherwise be read back as the old value
+        await fpsOverlayWrite?.value
         let snapshot = await Task.detached {
             (WovenCore.Doctor.run(paths: paths),
              SteamStatus(paths: paths.steam),
@@ -44,10 +88,15 @@ final class AppModel {
              try? RunnerStore(paths: paths).current(),
              FileManager.default.fileExists(atPath: EngineBuild.locate(paths: paths).root
                 .appending(path: "dist/runners/selfbuilt-cx26.3-r1/runner.json").path(percentEncoded: false)),
-             !SteamPatcher(paths: paths).deployedHookIsCurrent)
+             !SteamPatcher(paths: paths).deployedHookIsCurrent,
+             GameSessions(paths: paths).running(),
+             GlobalSettings(paths: paths).fpsOverlay)
         }.value
-        (checks, steam, games, runner, engineBuilt, hookOutdated) = snapshot
+        let sessions: [String]
+        (checks, steam, games, runner, engineBuilt, hookOutdated, sessions, fpsOverlayValue) = snapshot
+        runningGames = launcherGames().union(sessions)
         generation += 1
+        rediagnoseAll()
         builds = SteamBuilds.localReport(paths: paths)
         builds = await SteamBuilds.fullReport(paths: paths)
     }
@@ -84,8 +133,11 @@ final class AppModel {
         appLog("App Management for Steam.app: \(access.map { "\($0)" } ?? "unknown")")
     }
 
-    /// ~/Library/Application Support/WovenGames/logs/app.log, for support questions
-    func appLog(_ line: String) {
+    /// ~/Library/Application Support/WovenGames/logs/app.log, for support questions.
+    /// Callable from any thread (background syncs log too); the lock keeps lines whole.
+    nonisolated func appLog(_ line: String) {
+        Self.logLock.lock()
+        defer { Self.logLock.unlock() }
         let url = paths.logs.appending(path: "app.log")
         try? FileManager.default.createDirectory(at: paths.logs, withIntermediateDirectories: true)
         let entry = "\(ISO8601DateFormatter().string(from: Date())) \(line)\n"
@@ -97,6 +149,8 @@ final class AppModel {
             try? entry.write(to: url, atomically: true, encoding: .utf8)
         }
     }
+
+    private nonisolated static let logLock = NSLock()
 
     func openAppManagementSettings() {
         if !NSWorkspace.shared.open(AppManagement.settingsURL) {
@@ -134,11 +188,13 @@ final class AppModel {
         }
     }
 
-    private func perform(_ title: String, _ work: @escaping @Sendable (@escaping @Sendable (String) -> Void) throws -> Void) async {
+    func perform(_ title: String, _ work: @escaping @Sendable (@escaping @Sendable (String) -> Void) throws -> Void) async {
         await performAsync(title) { log in try work(log) }
     }
 
-    private func performAsync(_ title: String, _ work: @escaping @Sendable (@escaping @Sendable (String) -> Void) async throws -> Void) async {
+    /// Runs `work` off the main thread with `busy` set, collecting its log lines in `activity`
+    /// and a thrown error in `error`, then refreshes. Used by the extensions too.
+    func performAsync(_ title: String, _ work: @escaping @Sendable (@escaping @Sendable (String) -> Void) async throws -> Void) async {
         busy = title
         activity = []
         error = nil
