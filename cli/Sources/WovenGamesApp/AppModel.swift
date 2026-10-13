@@ -14,7 +14,7 @@ final class AppModel {
     /// bumped on every refresh, so views can re-read things (launch logs) that change while games stay the same
     var generation = 0
     var runner: Runner?
-    /// a built engine waiting to be installed (Library/Caches/WovenGames/engine)
+    /// a built engine waiting to be installed (Library/Developer/WovenGames/engine)
     var engineBuilt = false
     /// Steam.app carries an older hook than the installed one
     var hookOutdated = false

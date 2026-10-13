@@ -36,6 +36,8 @@ public struct Payload: Sendable {
     public var hookVersion: String
     /// how to get a missing file, for error messages
     public var hint: String
+    /// the release this came from (nil: a local build)
+    public var engineVersion: String? = nil
 }
 
 public struct EngineBuild: Sendable {
@@ -45,7 +47,7 @@ public struct EngineBuild: Sendable {
     public init(root: URL) { self.root = root }
 
     public static func locate(paths: Paths = Paths()) -> EngineBuild {
-        EngineBuild(root: paths.home.appending(path: "Library/Caches/WovenGames/engine/root"))
+        EngineBuild(root: paths.engineBuildRoot.appending(path: "root"))
     }
 
     var dist: URL { root.appending(path: "dist/runners") }
@@ -131,6 +133,7 @@ public struct Setup: Sendable {
         try place(payload.hook, dylib)
         try (payload.hookVersion + "\n").write(to: paths.support.appending(path: "dylib.version"), atomically: true, encoding: .utf8)
         log("hook \(payload.hookVersion) and helpers: \(paths.support.path(percentEncoded: false))")
+        try ((payload.engineVersion ?? "local build") + "\n").write(to: paths.engineVersionFile, atomically: true, encoding: .utf8)
 
         let compat = paths.support.appending(path: "compat")
         try fm.createDirectory(at: compat, withIntermediateDirectories: true)

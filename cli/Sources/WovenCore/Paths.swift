@@ -30,8 +30,12 @@ public struct Paths: Sendable {
 
     public func prefix(named name: String) -> URL { prefixes.appending(path: name) }
 
-    // Engine build output (engine/scripts/build-all.sh)
-    public var engineDist: URL { home.appending(path: "Library/Caches/WovenGames/engine/dist/runners") }
+    // Engine build tree (engine/scripts/build-all.sh). Not under Caches: macOS empties that
+    // when the disk runs low, and a rebuild takes an hour.
+    public var engineBuildRoot: URL { home.appending(path: "Library/Developer/WovenGames/engine") }
+    public var engineDist: URL { engineBuildRoot.appending(path: "dist/runners") }
+    /// which release the installed engine came from ("local build" for `woven setup`)
+    public var engineVersionFile: URL { support.appending(path: "engine.version") }
 
     // NotProton's own install, which M3 takes over
     public var notProtonSupport: URL { applicationSupport.appending(path: "notproton") }

@@ -23,6 +23,21 @@ public struct LastRun: Equatable, Sendable {
     public var backendReason: String?
     /// the last "=== aborted ..." or "=== ... missing ..." line, if any
     public var problem: String?
+    /// the launch script stopped before starting the game, during this step
+    public var abortedStage: String?
+    /// the prefix was made by another Wine build (needs a reset)
+    public var foreignPrefix = false
+    /// "=== failed to stage <file> ===": engine files are missing
+    public var stagingFailed: String?
+    /// Steam's Stop or the app's Force Quit ended the game
+    public var terminated = false
+    /// set once the session ended
+    public var exitStatus: Int?
+    /// how long the session ran, when the log says
+    public var seconds: Int?
+    public var startEpoch: Int?
+
+    public var ended: Bool { exitStatus != nil || abortedStage != nil }
 }
 
 public struct SteamLibrary: Sendable {
@@ -106,8 +121,22 @@ public struct SteamLibrary: Sendable {
                 let parts = rest.components(separatedBy: " from ")
                 result.backend = parts.first
                 result.backendReason = parts.count > 1 ? parts[1] : nil
+            } else if line.hasPrefix("start_epoch=") {
+                result.startEpoch = Int(line.dropFirst("start_epoch=".count))
             } else if line.hasPrefix("=== aborted") || line.contains("missing") && line.hasPrefix("===") {
                 result.problem = line.trimmingCharacters(in: CharacterSet(charactersIn: "= "))
+                if let m = line.firstMatch(of: try! Regex(#"=== aborted during (.+) \(exit (\d+)\)"#)) {
+                    result.abortedStage = m.output[1].substring.map(String.init)
+                }
+            } else if line.hasPrefix("=== prefix ntdll is ") {
+                result.foreignPrefix = true
+            } else if line.hasPrefix("=== failed to stage ") {
+                result.stagingFailed = String(line.dropFirst("=== failed to stage ".count).dropLast(4))
+            } else if line.hasPrefix("=== termination signal received") {
+                result.terminated = true
+            } else if let m = line.firstMatch(of: try! Regex(#"^=== game exited status=(\d+)(?: after (\d+)s)?"#)) {
+                result.exitStatus = m.output[1].substring.flatMap { Int($0) }
+                result.seconds = m.output[2].substring.flatMap { Int($0) }
             }
         }
         return result

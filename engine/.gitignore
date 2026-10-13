@@ -1,4 +1,4 @@
-# fetched or generated, never committed (may be symlinks into ~/Library/Caches/WovenGames)
+# fetched or generated, never committed (may be symlinks into ~/Library/Developer/WovenGames)
 /build
 /dist
 /downloads
