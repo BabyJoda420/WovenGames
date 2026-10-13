@@ -45,11 +45,12 @@ public struct SteamLaunchOptions: Equatable, Sendable {
 
     var tokens: [String] { raw.split(whereSeparator: \.isWhitespace).map(String.init) }
 
-    /// NAME=value settings written before %command% (Steam on macOS cannot start the game:
-    /// "OS Error 260"), or with no %command% at all (they reach the game, not WovenGames).
+    /// NAME=value settings written before %command%: Steam on macOS then cannot start the game
+    /// ("OS Error 260"). Without %command% Steam appends the options to the command, where the
+    /// launch script reads them, so only options in front of %command% are misplaced.
     public var misplacedSettings: [String] {
         let t = tokens
-        let end = t.firstIndex(of: "%command%") ?? t.endIndex
+        guard let end = t.firstIndex(of: "%command%") else { return [] }
         return t[..<end].filter(Self.isSetting)
     }
 
@@ -58,13 +59,15 @@ public struct SteamLaunchOptions: Equatable, Sendable {
     /// Settings that do reach WovenGames, e.g. ["CX_GRAPHICS_BACKEND=dxmt"].
     public var settings: [String] {
         let t = tokens
-        guard let start = t.firstIndex(of: "%command%") else { return [] }
+        guard let start = t.firstIndex(of: "%command%") else { return t.filter(Self.isSetting) }
         return t[(start + 1)...].filter(Self.isSetting)
     }
 
     /// The same options with every setting moved after %command%.
     public var corrected: String {
         let t = tokens
+        // without %command%, every option was for the game: all of it goes after %command%
+        guard hasCommand else { return (["%command%"] + t).joined(separator: " ") }
         let misplaced = Set(misplacedSettings)
         let before = t.prefix(while: { $0 != "%command%" }).filter { !misplaced.contains($0) }
         let after = t.drop(while: { $0 != "%command%" }).dropFirst()
@@ -118,13 +121,9 @@ public enum LaunchDiagnosis {
 
         if let options = launchOptions {
             let misplaced = options.misplacedSettings
-            if !misplaced.isEmpty && options.hasCommand {
+            if !misplaced.isEmpty {
                 out.append(.init(severity: .error, title: "Steam cannot start the game with these launch options",
                                  detail: "\(misplaced.joined(separator: " ")) comes before %command%. On a Mac, Steam then looks for a program with that name and fails (\"OS Error 260\"). Settings belong after %command%; copy the corrected options into the game's Properties → General → Launch Options in Steam.",
-                                 fix: .launchOptions(options.corrected)))
-            } else if !misplaced.isEmpty {
-                out.append(.init(severity: .warning, title: "Launch options go to the game, not to WovenGames",
-                                 detail: "Without %command%, Steam passes \(misplaced.joined(separator: " ")) to the game itself. Put %command% first so WovenGames sees the settings.",
                                  fix: .launchOptions(options.corrected)))
             }
             let overriding = options.settings.filter { $0.hasPrefix("CX_GRAPHICS_BACKEND=") || $0.hasPrefix("MTL_HUD_ENABLED=") || $0.hasPrefix("WOVEN_RETINA=") }

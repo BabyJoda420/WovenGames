@@ -61,7 +61,7 @@ public struct CompatSync: Sendable {
         for raw in text.split(whereSeparator: \.isNewline) {
             let line = String(raw).trimmingCharacters(in: .whitespaces)
             if line.isEmpty || line.hasPrefix("#") { kept.append(line); continue }
-            let key = line.split(separator: "=", maxSplits: 1).first.map(String.init) ?? ""
+            let key = line.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
             let validName = !key.isEmpty && key.allSatisfy { $0.isASCII && ($0.isUppercase || $0.isNumber || $0 == "_") }
             if line.contains("=") && validName && allowed(key) { kept.append(line) } else { dropped.append(line) }
         }
@@ -128,7 +128,13 @@ public struct CompatSync: Sendable {
         // recommendations withdrawn upstream go away, but only ones this sync wrote
         let upstream = Set(entries.map(\.name))
         for name in state.files.keys.sorted() where !upstream.contains(name) {
-            try? fm.removeItem(at: folder.appending(path: name))
+            let local = folder.appending(path: name)
+            // something else replaced it since (an engine reinstall, the user): not ours to delete
+            if let have = (try? Data(contentsOf: local)).map(Self.gitBlobSHA), have != state.files[name]?.local {
+                state.files[name] = nil
+                continue
+            }
+            try? fm.removeItem(at: local)
             state.files[name] = nil
             result.removed.append(name)
         }

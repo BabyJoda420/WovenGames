@@ -21,9 +21,10 @@ public struct GameSessions: Sendable {
     public func runScript(appID: String) -> pid_t? {
         guard let text = try? String(contentsOf: pidFile(appID), encoding: .utf8),
               let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)), pid > 1 else { return nil }
-        // a stale file can name a pid that now belongs to something else
+        // a stale file can name a pid that now belongs to something else. Steam starts the
+        // script as ".../compatibilitytools.d/wovengames-proton/./run".
         let command = Shell.capture("/bin/ps", ["-p", "\(pid)", "-o", "command="]).output
-        return command.contains("wovengames-proton/run") || command.contains("compat_run") ? pid : nil
+        return command.contains("/wovengames-proton/") || command.contains("compat_run") ? pid : nil
     }
 
     /// App IDs of games whose launch script is running.
@@ -33,7 +34,7 @@ public struct GameSessions: Sendable {
     }
 
     /// Stops a game the way Steam's Stop does, harder if that does not work.
-    public func forceQuit(appID: String, prefix: URL, grace: TimeInterval = 12, log: @Sendable (String) -> Void = { _ in }) async {
+    public func forceQuit(appID: String, prefix: URL, grace: TimeInterval = 30, log: @Sendable (String) -> Void = { _ in }) async {
         if let pid = runScript(appID: appID) {
             log("asking the game to stop")
             kill(pid, SIGTERM)

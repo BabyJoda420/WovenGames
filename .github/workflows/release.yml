@@ -89,7 +89,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          cat > release/NOTES.md <<EOF
+          : > release/NOTES.md
+          prerelease=()
+          if [[ "$VERSION" == *-* ]]; then
+            prerelease=(--prerelease)
+            cat >> release/NOTES.md <<EOF
+          **Beta.** This is a test build of the next WovenGames version. The app's Install button keeps offering the newest full release; turn on beta updates in WovenGames' settings, or download this zip directly, to try it.
+
+          EOF
+          fi
+          cat >> release/NOTES.md <<EOF
           ## Install
 
           1. Download **WovenGames-$VERSION.zip**, unzip it, and move **WovenGames.app** to Applications.
@@ -106,4 +115,4 @@ jobs:
           anti-cheat do not run.
           EOF
           gh release create "$GITHUB_REF_NAME" release/*.tar.xz release/*.sha256 release/*.zip \
-            --title "WovenGames $VERSION" --notes-file release/NOTES.md
+            --title "WovenGames $VERSION" --notes-file release/NOTES.md "${prerelease[@]}"
