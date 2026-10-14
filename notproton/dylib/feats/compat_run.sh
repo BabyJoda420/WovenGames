@@ -34,6 +34,9 @@ if [ -r "$global_env" ]; then
     case "$line" in
       CX_GRAPHICS*=*|D3DM_*=*|DXMT_*=*|DXVK_*=*|MTL_*=*|NOTPROTON_*=*|ROSETTA_*=*|WINE*=*|WOVEN_*=*)
         name=${line%%=*}
+        # a hand edit like "NAME =1" is no variable name: eval would fail and end the script
+        # here, before it has a log (or run what follows the name as a command)
+        case "$name" in *[!A-Za-z0-9_]*) continue ;; esac
         eval "isset=\${$name+x}"
         # shellcheck disable=SC2154 # eval assigns isset on the line above
         [ -n "$isset" ] && continue

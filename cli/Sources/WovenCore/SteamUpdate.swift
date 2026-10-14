@@ -63,9 +63,10 @@ public struct SteamUpdater: Sendable {
         let patcher = { var p = SteamPatcher(paths: paths); p.manageSteamProcess = manageSteamProcess; return p }()
         log("updating Steam \(report.installed ?? "?") → \(target)")
         try patcher.quitSteam(log: log)
-        try patcher.unpin()
-        log("Steam may update at launch now")
         do {
+            // inside: an unpin that fails halfway has already lifted one of the pins
+            try patcher.unpin()
+            log("Steam may update at launch now")
             try await installAndVerify(target: target, log: log)
         } catch {
             try? patcher.pin()

@@ -153,10 +153,12 @@ public enum LaunchDiagnosis {
             out.append(.init(severity: .error, title: "WovenGames stopped before starting the game",
                              detail: "Preparing the game failed during \"\(stage)\". \(fix == .resetPrefix ? "Resetting the game's prefix usually fixes this." : fix == .installEngine ? "Reinstalling the engine usually fixes this." : "The launch log has the details.")",
                              fix: fix))
-        } else if let status = run.exitStatus, status != 0, !run.terminated, (run.seconds ?? 0) < 30 {
+        } else if let status = run.exitStatus, status != 0, !run.terminated,
+                  // no duration (an older launch script's log): it may have run for hours
+                  let seconds = run.seconds, seconds < 30 {
             let next = alternative(to: run.backend, runner: runner)
             out.append(.init(severity: .warning, title: "The game closed right after starting",
-                             detail: "It ran for \(run.seconds.map { "\($0) seconds" } ?? "a moment") and exited with status \(status). \(next.map { "Games often start with a different graphics backend: try \($0.label.components(separatedBy: " (").first ?? $0.rawValue)." } ?? "The launch log has the details.")",
+                             detail: "It ran for \(seconds) seconds and exited with status \(status). \(next.map { "Games often start with a different graphics backend: try \($0.label.components(separatedBy: " (").first ?? $0.rawValue)." } ?? "The launch log has the details.")",
                              fix: next.map(LaunchFinding.Fix.switchBackend) ?? .openLaunchLog))
         }
         return out.sorted { $0.severity > $1.severity }
