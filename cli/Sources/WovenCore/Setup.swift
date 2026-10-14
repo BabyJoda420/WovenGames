@@ -95,6 +95,10 @@ public struct Setup: Sendable {
         try require(payload.valveBridge.appending(path: "steamclient64.dll"), "Valve's bridge DLLs")
         if checkRunningGames, RunnerStore(paths: paths).inUse() { throw RunnerError.inUse }
 
+        // an update: keep a way back to each game's prefix as the old engine left it
+        if (try? RunnerStore(paths: paths).current()) != nil {
+            PrefixSnapshots.beforeEngineUpdate(paths: paths, log: log)
+        }
         let runner = try RunnerStore(paths: paths).install(from: payload.runner)
         _ = Shell.capture("/usr/bin/xattr", ["-dr", "com.apple.quarantine", runner.root.path(percentEncoded: false)])
         log("runner: \(runner.id) (selected)")

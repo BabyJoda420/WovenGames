@@ -7,7 +7,7 @@ struct Woven: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "WovenGames: play Windows games on Apple Silicon.",
         version: "0.2.1",
-        subcommands: [Doctor.self, Install.self, Setup.self, Uninstall.self, RunnerCommand.self, PrefixCommand.self, BackendCommand.self, Run.self, SteamCommand.self, GamesCommand.self, CompatCommand.self, Update.self, Report.self]
+        subcommands: [Doctor.self, Install.self, Setup.self, Uninstall.self, RunnerCommand.self, PrefixCommand.self, BackendCommand.self, Run.self, SteamCommand.self, GamesCommand.self, SnapshotCommand.self, CompatCommand.self, Update.self, Report.self]
     )
 }
 
@@ -185,6 +185,9 @@ extension Woven {
                         throw ValidationError("no built runner in \(dist.path(percentEncoded: false)); run engine/scripts/build-all.sh first")
                     }
                     source = newest
+                }
+                if (try? RunnerStore().current()) != nil {
+                    PrefixSnapshots.beforeEngineUpdate(paths: Paths()) { print($0) }
                 }
                 let runner = try RunnerStore().install(from: source, link: link)
                 print("installed and selected \(runner.id)")

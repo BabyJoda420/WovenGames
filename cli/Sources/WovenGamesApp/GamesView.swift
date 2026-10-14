@@ -137,6 +137,13 @@ struct GameDetailView: View {
     @State private var confirmReset = false
     /// installed runner ids, for the Engine picker
     @State private var runnerIDs: [String] = []
+    @State private var snapshots: [PrefixSnapshot] = []
+    @State private var pendingRestore: PrefixSnapshot?
+
+    static func snapshotLabel(_ s: PrefixSnapshot) -> String {
+        let when = s.date.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? s.id
+        return s.automatic ? "\(when) (before an engine update)" : when
+    }
 
     var body: some View {
         // reads model.launchFindings, which diagnose() refreshes after each run (generation bump)
@@ -209,6 +216,16 @@ struct GameDetailView: View {
                         Button("Show Prefix") { model.reveal(game.prefix) }
                             .disabled(!FileManager.default.fileExists(atPath: game.prefix.path(percentEncoded: false)))
                         Spacer()
+                        Menu("Snapshots") {
+                            Button("Take Snapshot Now") { Task { await model.snapshotPrefix(of: game) } }
+                            if !snapshots.isEmpty {
+                                Section("Restore") {
+                                    ForEach(snapshots) { s in Button(Self.snapshotLabel(s)) { pendingRestore = s } }
+                                }
+                            }
+                        }
+                        .fixedSize()
+                        .disabled(model.busy != nil || !FileManager.default.fileExists(atPath: game.prefix.path(percentEncoded: false)))
                         Button("Reset Prefix…", role: .destructive) { confirmReset = true }
                             .disabled(!FileManager.default.fileExists(atPath: game.prefix.path(percentEncoded: false)))
                     }
@@ -231,6 +248,15 @@ struct GameDetailView: View {
         .task(id: model.generation) {
             let game = game
             lastRun = await Task.detached { SteamLibrary.lastRun(of: game) }.value
+            snapshots = PrefixSnapshots(compatData: game.compatData).list()
+        }
+        .confirmationDialog("Restore \(game.name)'s prefix from this snapshot?", isPresented: Binding(
+            get: { pendingRestore != nil }, set: { if !$0 { pendingRestore = nil } })) {
+            Button("Restore", role: .destructive) {
+                if let s = pendingRestore { Task { await model.restoreSnapshot(s.id, of: game) } }
+            }
+        } message: {
+            Text("The current prefix goes to the Trash. Saves synced to Steam Cloud are not affected.")
         }
         .onChange(of: settings) { _, new in
             guard let saved, new != saved else { return }
