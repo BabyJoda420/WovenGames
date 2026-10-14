@@ -29,6 +29,8 @@ valve/e847516750.patch
 valve/eeb10d71be.patch
 #
 # Ours. 0001 ports Valve's ntdll steamclient -> lsteamclient series (valve/ported/) onto
-# this tree; 0002 registers dlls/lsteamclient with the build.
+# this tree; 0002 registers dlls/lsteamclient with the build; 0003 execs the game's own exe
+# from the per-game launcher bundle so macOS Game Mode sees it (see compat_run.sh).
 local/0001-steam-ntdll-route-steamclient-64-.dll-into-builtin-l.patch
 local/0002-build-register-dlls-lsteamclient-let-makedep-see-pra.patch
+local/0003-ntdll-exec-the-game-s-exe-from-the-WovenGames-launch.patch
