@@ -395,6 +395,14 @@ final class LibraryTests: XCTestCase {
 }
 
 extension SteamPatcherTests {
+    func testPatchPinningPinsSteam() throws {
+        let cfg = home.appending(path: "Library/Application Support/Steam/steam.cfg")
+        try patcher.patch()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: cfg.path(percentEncoded: false)))
+        try patcher.patch(pinning: true)
+        XCTAssertEqual(try String(contentsOf: cfg, encoding: .utf8), "BootStrapperInhibitUpdateOnLaunch=enable\n")
+    }
+
     func testHookCurrentTracksTheInstalledBuild() throws {
         try patcher.patch()
         XCTAssertTrue(patcher.deployedHookIsCurrent)

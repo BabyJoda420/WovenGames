@@ -132,7 +132,7 @@ struct SetupAssistant: View {
         if steamPatched {
             Label("Windows games in Steam now show Install and Play.", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
         } else {
-            Text("Adds the hook to Steam.app and keeps Steam on this build. Steam quits if it is running; start it again afterwards.")
+            Text("Adds the hook to Steam.app and keeps Steam on this build. Steam restarts if it is open.")
                 .fixedSize(horizontal: false, vertical: true)
             Button(model.hookOutdated ? "Update Hook" : "Patch Steam") { Task { await model.patchSteam() } }
                 .buttonStyle(.borderedProminent)
