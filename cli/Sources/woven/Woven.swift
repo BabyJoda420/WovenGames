@@ -6,7 +6,7 @@ import WovenCore
 struct Woven: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "WovenGames: play Windows games on Apple Silicon.",
-        version: "0.3.0-beta.1",
+        version: "0.3.0-beta.2",
         subcommands: [Doctor.self, Install.self, Setup.self, Uninstall.self, RunnerCommand.self, PrefixCommand.self, BackendCommand.self, Run.self, SteamCommand.self, GamesCommand.self, SnapshotCommand.self, CompatCommand.self, Update.self, Report.self]
     )
 }
@@ -391,18 +391,17 @@ extension Woven {
 
         struct Patch: ParsableCommand {
             static let configuration = CommandConfiguration(
-                abstract: "Inject the WovenGames hook into /Applications/Steam.app (quits Steam).",
+                abstract: "Inject the WovenGames hook into /Applications/Steam.app (restarts Steam if it is running).",
                 discussion: "Needs App Management permission for your terminal. Takes over a NotProton install."
             )
             func run() throws {
-                try SteamPatcher().patch { print($0) }
-                try SteamPatcher().pin()
+                try SteamPatcher().patch(pinning: true) { print($0) }
                 print("Steam no longer updates at launch (`woven steam unpin` to allow it)")
             }
         }
 
         struct Unpatch: ParsableCommand {
-            static let configuration = CommandConfiguration(abstract: "Remove the hook and restore Steam's Info.plist (quits Steam).")
+            static let configuration = CommandConfiguration(abstract: "Remove the hook and restore Steam's Info.plist (restarts Steam if it is running).")
             func run() throws { try SteamPatcher().unpatch { print($0) } }
         }
 

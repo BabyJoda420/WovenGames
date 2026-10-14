@@ -120,8 +120,7 @@ final class AppModel {
 
     func patchSteam() async {
         await perform("Patching Steam") { log in
-            try SteamPatcher().patch(log: log)
-            try SteamPatcher().pin()
+            try SteamPatcher().patch(pinning: true, log: log)
             log("Steam no longer updates at launch")
         }
         await checkAccess()

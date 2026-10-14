@@ -4,6 +4,14 @@ What changed in each WovenGames release, newest first. Each release on GitHub sh
 
 ## Unreleased
 
+## 0.3.0-beta.2 — 2026-10-14
+
+### Improved
+- Tested *Clair Obscur: Expedition 33*; added a tip that choosing about half your screen's resolution in the game's graphics settings is the biggest speed-up, especially on a MacBook Air (see the README).
+
+### Fixed
+- After setting up or restoring Steam (WovenGames' "Patch Steam" or "Restore Steam", or the `woven` tool), Steam was left closed; it now opens again if it was open.
+
 ## 0.3.0-beta.1 — 2026-10-14
 
 ### New

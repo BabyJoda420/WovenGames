@@ -57,17 +57,22 @@ public struct SteamPatcher: Sendable {
 
     // MARK: patch
 
-    public func patch(log: (String) -> Void = { _ in }) throws {
+    /// `pinning`: also pin Steam's build (see `pin()`) before Steam is started again, so the
+    /// restarted Steam cannot update past the build the hook supports.
+    public func patch(pinning: Bool = false, log: (String) -> Void = { _ in }) throws {
         let fm = FileManager.default
         guard fm.fileExists(atPath: steam.app.path(percentEncoded: false)) else { throw SteamPatchError.steamMissing }
         let source = paths.support.appending(path: "wovengames.dylib")
         guard fm.fileExists(atPath: source.path(percentEncoded: false)) else { throw SteamPatchError.notSetUp }
         try checkAccess()
-        try quitSteam(log: log)
-        do {
-            try patchQuitSteam(source: source, log: log)
-        } catch let error where AppManagement.isDenial(error) {
-            throw SteamPatchError.appManagementDenied
+        let wasRunning = try quitSteam(log: log)
+        try Self.restartingSteam(if: wasRunning, log: log, start: startSteam) {
+            do {
+                try patchQuitSteam(source: source, log: log)
+            } catch let error where AppManagement.isDenial(error) {
+                throw SteamPatchError.appManagementDenied
+            }
+            if pinning { try pin() }
         }
     }
 
@@ -132,7 +137,14 @@ public struct SteamPatcher: Sendable {
         let fm = FileManager.default
         guard fm.fileExists(atPath: steam.app.path(percentEncoded: false)) else { throw SteamPatchError.steamMissing }
         try checkAccess()
-        try quitSteam(log: log)
+        let wasRunning = try quitSteam(log: log)
+        try Self.restartingSteam(if: wasRunning, log: log, start: startSteam) {
+            try unpatchQuitSteam(log: log)
+        }
+    }
+
+    func unpatchQuitSteam(log: (String) -> Void) throws {
+        let fm = FileManager.default
         let current = try readPlist()
         if let data = try? Data(contentsOf: originalPlist),
            let backup = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
@@ -266,13 +278,33 @@ public struct SteamPatcher: Sendable {
         log("re-signed Steam.app (ad hoc)")
     }
 
-    public func quitSteam(log: (String) -> Void) throws {
-        guard manageSteamProcess else { return }
+    /// Returns true when Steam was running and has been quit (so the caller may start it again).
+    @discardableResult
+    public func quitSteam(log: (String) -> Void) throws -> Bool {
+        guard manageSteamProcess else { return false }
         func running() -> Bool { Shell.capture("/usr/bin/pgrep", ["-x", "steam_osx"]).status == 0 }
-        guard running() else { return }
+        guard running() else { return false }
         log("quitting Steam...")
         _ = Shell.capture("/usr/bin/osascript", ["-e", "quit app \"Steam\""])
         for _ in 0..<60 where running() { Thread.sleep(forTimeInterval: 0.5) }
         if running() { throw SteamPatchError.stillRunning }
+        return true
+    }
+
+    func startSteam() {
+        _ = Shell.capture("/usr/bin/open", ["-a", steam.app.path(percentEncoded: false)])
+    }
+
+    /// Runs `body` with Steam quit; starts Steam again afterwards if it was running before
+    /// (`wasRunning`, from `quitSteam`), also when `body` fails, whose error is rethrown.
+    static func restartingSteam(if wasRunning: Bool, log: (String) -> Void, start: () -> Void,
+                                _ body: () throws -> Void) throws {
+        defer {
+            if wasRunning {
+                log("starting Steam again")
+                start()
+            }
+        }
+        try body()
     }
 }

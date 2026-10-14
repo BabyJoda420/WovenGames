@@ -99,7 +99,7 @@ no notarization**, so users right-click → Open on first launch. This isn't an 
 
 | # | Item | Size | Status |
 |---|---|---|---|
-| I1 | UE5 D3D12 on D3DMetal: reproduce the `DXGIAdapter::QueryVideoMemoryInfo` spin from Double Exposure, then patch. Unblocks Expedition 33 | L | 🟡 lead: D3DMetal reports a 24 GB budget on a 16 GB Mac (`d3dprobe`); needs a UE5 DX12 game to confirm |
+| I1 | UE5 D3D12 on D3DMetal: reproduce the `DXGIAdapter::QueryVideoMemoryInfo` spin from Double Exposure, then patch | L | 🟡 lead: D3DMetal reports a 24 GB budget on a 16 GB Mac (`d3dprobe`); unconfirmed: Expedition 33 (UE5 D3D12) runs on D3DMetal with no menu hang, so the hang is specific to Double Exposure, and capping its texture pool changed nothing |
 | I2 | Launch problem cards: move launch options placed before `%command%` into `games/<appid>.env` with one click; after a failed launch, suggest the next backend (and `-dx11` for UE games on DXMT) | S–M | ✅ |
 | I3 | Fixtures that check the shell `detect_d3d` and Swift `BackendDetector` pick the same backend, run in CI | S | ✅ 25 cases |
 | I4 | `woven doctor` checks the App Management permission | S | ✅ |
@@ -118,6 +118,7 @@ prefix templates and persistent shader caches (once measured).
 |---|---|---|
 | Billie's Wheelie (3180310) | Unity 2022.3, D3D11 | ✅ smooth on DXMT (after the Unity detection fix; wined3d was broken) |
 | Life is Strange: Double Exposure (1874000) | UE5, D3D12 | 🟡 D3D12/D3DMetal hangs in the menu (spins in `DXGIAdapter::QueryVideoMemoryInfo`). `-dx11` on DXMT: gameplay ~45 fps with a few hitches. Menu: exclusive fullscreen at native 2560×1664 lands in the top-left corner without Retina mode (`WOVEN_RETINA=1` fixes it); the title scene is GPU-bound at ~337 ms/frame at native resolution (`compat/1874000.env`) |
+| Clair Obscur: Expedition 33 (1903340) | UE5, D3D12 | 🟡 starts and plays on D3DMetal (picked automatically), no menu hang; one or two visual quirks. MacBook Air M4 16 GB, title screen, median fps: 2560×1664 native 37 fps (gameplay 8–10 fps on Low, player report), 1470×956 87 fps, 1280×832 103 fps (2.3–2.8×). GPU at 98%: GPU-bound by resolution. No fps change from FSR 4 off, `r.Streaming.PoolSize=2048`, `D3DM_SUPPORT_DXR=0` or a 30 fps cap, so the D3DMetal 24 GB budget lead does not explain this game's speed. Chip reached ~88 °C; a fanless Air throttles in longer sessions. DXMT with `-dx11` also starts, at about half the memory; fps not measured yet |
 
 ### Known quirks
 

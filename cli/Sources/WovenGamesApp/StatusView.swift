@@ -33,7 +33,7 @@ struct StatusView: View {
                     if model.steam?.injection == .wovenGames {
                         if model.hookOutdated {
                             Button("Update Hook") { Task { await model.patchSteam() } }
-                                .help("Installs the newer hook into Steam.app. Quits and you restart Steam.")
+                                .help("Installs the newer hook into Steam.app. Steam restarts if it is open.")
                         }
                         Button("Restore Steam…", role: .destructive) { confirmRestore = true }
                     } else {
@@ -134,7 +134,7 @@ struct StatusView: View {
         .confirmationDialog("Restore Steam?", isPresented: $confirmRestore) {
             Button("Restore Steam", role: .destructive) { Task { await model.restoreSteam() } }
         } message: {
-            Text("Removes the WovenGames hook from Steam.app and puts its original settings back. Windows games stop showing Install and Play until you patch again. Steam is quit if it is running.")
+            Text("Removes the WovenGames hook from Steam.app and puts its original settings back. Windows games stop showing Install and Play until you patch again. Steam restarts if it is open.")
         }
     }
 
