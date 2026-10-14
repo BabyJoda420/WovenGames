@@ -58,17 +58,22 @@ public struct GameSettings: Equatable, Sendable {
                 otherLines.append(line)
                 continue
             }
-            let value = parts[1]
-            switch key {
-            case Self.backendKey: backend = BackendChoice(rawValue: value) ?? .auto
-            case Self.hudKey: metalHUD = value == "1"
-            case Self.msyncKey: msync = value != "0"
-            case Self.retinaKey, "NOTPROTON_RETINA": retina = value == "1"  // older name still read
-            case Self.argsKey: gameArgs = value
-            case Self.runnerKey: runner = value
-            default: otherLines.append(line)
-            }
+            if !assign(key, parts[1]) { otherLines.append(line) }
         }
+    }
+
+    /// Sets a setting this type manages; false for any other key.
+    mutating func assign(_ key: String, _ value: String) -> Bool {
+        switch key {
+        case Self.backendKey: backend = BackendChoice(rawValue: value) ?? .auto
+        case Self.hudKey: metalHUD = value == "1"
+        case Self.msyncKey: msync = value != "0"
+        case Self.retinaKey, "NOTPROTON_RETINA": retina = value == "1"  // older name still read
+        case Self.argsKey: gameArgs = value
+        case Self.runnerKey: runner = value
+        default: return false
+        }
+        return true
     }
 
     /// Only what differs from the defaults is written, so the run script's defaults still apply.

@@ -133,12 +133,14 @@ extension Woven {
             func run() throws {
                 let game = try GamesCommand.game(appID)
                 let settings = GameSettings.load(appID: appID)
+                let isUE = LaunchDiagnosis.isUnrealEngine(installDir: game.installDir)
                 let findings = LaunchDiagnosis.findings(
                     run: SteamLibrary.lastRun(of: game),
                     launchOptions: SteamLaunchOptions.read(appID: appID),
                     runner: RunnerStore().runner(for: settings),
                     settings: settings,
-                    detected: BackendDetector.detect(launchTarget: nil, installDir: game.installDir).backend
+                    detected: BackendDetector.detect(launchTarget: nil, installDir: game.installDir).backend,
+                    isUnreal: isUE
                 )
                 if findings.isEmpty { print("no problems found"); return }
                 for (i, finding) in findings.enumerated() {
@@ -160,6 +162,7 @@ extension Woven {
                 case .installEngine: "reinstall the engine: woven install --latest"
                 case .launchOptions(let options): "set the launch options in Steam to:\n   \(options)"
                 case .switchBackend(let choice): "switch the graphics backend to \(choice.label) in the WovenGames app"
+                case .useSettings(let choice, let args): "switch backend to \(choice.label) and set game args '\(args)' in the WovenGames app"
                 case .openLaunchLog: "read the launch log: \(game.runLog.path(percentEncoded: false))"
                 }
             }

@@ -112,11 +112,13 @@ extension AppModel {
         // the detected backend only matters for Automatic; the scan reads the game's executables
         let detected = settings.backend == .auto
             ? BackendDetector.detect(launchTarget: nil, installDir: game.installDir).backend : nil
+        let isUE = LaunchDiagnosis.isUnrealEngine(installDir: game.installDir)
         return LaunchDiagnosis.findings(run: SteamLibrary.lastRun(of: game),
                                         launchOptions: SteamLaunchOptions.read(appID: game.appID, paths: paths),
                                         runner: RunnerStore(paths: paths).runner(for: settings),
                                         settings: settings,
-                                        detected: detected)
+                                        detected: detected,
+                                        isUnreal: isUE)
     }
 
     // MARK: play and stop

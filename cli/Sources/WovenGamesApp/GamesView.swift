@@ -312,6 +312,7 @@ private struct ProblemCard: View {
     let game: InstalledGame
     @Binding var settings: GameSettings
     @Binding var confirmReset: Bool
+    @State private var movedToSettings = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -359,27 +360,59 @@ private struct ProblemCard: View {
                 .disabled(model.busy != nil)
         case .launchOptions(let options):
             VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .top) {
-                    Text(options)
-                        .font(.body.monospaced())
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
-                    Button("Copy") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(options, forType: .string)
+                if movedToSettings {
+                    Text("Settings moved to WovenGames. Update Steam launch options to:")
+                        .font(.caption).foregroundStyle(.secondary)
+                    let textToCopy = finding.cleanedOptions ?? "%command%"
+                    HStack(alignment: .top) {
+                        Text(textToCopy)
+                            .font(.body.monospaced())
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
+                        Button("Copy") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(textToCopy, forType: .string)
+                        }
+                    }
+                    Text("Paste into the game's Properties → General → Launch Options in Steam.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    HStack(alignment: .top) {
+                        Text(options)
+                            .font(.body.monospaced())
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
+                        Button("Copy") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(options, forType: .string)
+                        }
+                    }
+                    Text("Paste into the game's Properties → General → Launch Options in Steam.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if !finding.misplacedSettings.isEmpty {
+                        Button("Move to WovenGames Settings") {
+                            settings.apply(tokens: finding.misplacedSettings)
+                            movedToSettings = true
+                        }
                     }
                 }
-                Text("Paste into the game's Properties → General → Launch Options in Steam.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
         case .switchBackend(let backend):
             Button("Use \(backend.label.components(separatedBy: " (").first ?? backend.rawValue)") {
                 settings.backend = backend
             }
             .disabled(settings.backend == backend)
+        case .useSettings(let backend, let gameArgs):
+            Button("Use \(backend.label.components(separatedBy: " (").first ?? backend.rawValue) with \(gameArgs)") {
+                settings.apply(backend: backend, gameArgs: gameArgs)
+            }
+            .disabled(settings.backend == backend && settings.gameArgs.split(whereSeparator: \.isWhitespace).contains(Substring(gameArgs)))
         case .openLaunchLog:
             Button("Open Launch Log") { model.open(game.runLog) }
         }
