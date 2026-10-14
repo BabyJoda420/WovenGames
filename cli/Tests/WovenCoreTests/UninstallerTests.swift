@@ -213,4 +213,18 @@ final class UninstallerTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: devTree.path(percentEncoded: false)), "developer tree untouched")
         XCTAssertTrue(logOutput.contains("engine build tree left intact"))
     }
+
+    func testNonSteamPrefixesKeptUnlessDeleting() throws {
+        let fm = FileManager.default
+        let save = paths.support.appending(path: "nonsteam/9000000001/pfx/save.dat")
+        try put("save", save)
+        try put("log", paths.support.appending(path: "wovengames.log"))
+
+        try Uninstaller(paths: paths, deletePrefixes: false, manageSteamProcess: false).run()
+        XCTAssertTrue(fm.fileExists(atPath: save.path(percentEncoded: false)), "kept by default")
+        XCTAssertFalse(fm.fileExists(atPath: paths.support.appending(path: "wovengames.log").path(percentEncoded: false)))
+
+        try Uninstaller(paths: paths, deletePrefixes: true, manageSteamProcess: false).run()
+        XCTAssertFalse(fm.fileExists(atPath: paths.support.path(percentEncoded: false)), "gone with --delete-prefixes")
+    }
 }

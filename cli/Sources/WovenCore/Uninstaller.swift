@@ -39,6 +39,8 @@ public struct Uninstaller: Sendable {
         public var removeCompatTool: Bool
         public var prefixesToDelete: [URL]
         public var removeSupport: Bool
+        /// support/nonsteam holds the prefixes of games added outside Steam: kept like Steam's
+        public var keepNonSteamPrefixes = false
         public var supportDir: URL
         public var developerTree: URL?
         public var developerTreeSize: Int64?
@@ -59,7 +61,9 @@ public struct Uninstaller: Sendable {
             for prefix in prefixesToDelete {
                 items.append("Delete game prefix: \(prefix.path(percentEncoded: false))")
             }
-            if removeSupport {
+            if removeSupport && keepNonSteamPrefixes {
+                items.append("Remove application support directory except nonsteam/ (prefixes of games added outside Steam): \(supportDir.path(percentEncoded: false))")
+            } else if removeSupport {
                 items.append("Remove application support directory: \(supportDir.path(percentEncoded: false))")
             }
             return items
@@ -111,6 +115,7 @@ public struct Uninstaller: Sendable {
             removeCompatTool: removeCompatTool,
             prefixesToDelete: prefixesToDelete,
             removeSupport: removeSupport,
+            keepNonSteamPrefixes: !deletePrefixes && fm.fileExists(atPath: paths.support.appending(path: "nonsteam").path(percentEncoded: false)),
             supportDir: paths.support,
             developerTree: developerTree,
             developerTreeSize: developerTreeSize
@@ -176,7 +181,15 @@ public struct Uninstaller: Sendable {
         if currentPlan.removeSupport && fm.fileExists(atPath: paths.support.path(percentEncoded: false)) {
             do {
                 log("removing application support folder \(paths.support.path(percentEncoded: false))...")
-                try fm.removeItem(at: paths.support)
+                if currentPlan.keepNonSteamPrefixes {
+                    let names = try fm.contentsOfDirectory(atPath: paths.support.path(percentEncoded: false))
+                    for name in names where name != "nonsteam" {
+                        try fm.removeItem(at: paths.support.appending(path: name))
+                    }
+                    log("kept \(paths.support.appending(path: "nonsteam").path(percentEncoded: false)) (games added outside Steam)")
+                } else {
+                    try fm.removeItem(at: paths.support)
+                }
             } catch {
                 throw UninstallerError.stepFailed(step: "remove application support folder", underlying: error)
             }

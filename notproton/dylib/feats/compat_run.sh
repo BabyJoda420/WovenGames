@@ -923,7 +923,14 @@ if [ -n "$WOVEN_GAME_ARGS" ]; then
   done
   echo "game args added: $WOVEN_GAME_ARGS" >> "$log" 2>&1 || true
 fi
-set -- --args "$shim_exe" "$@"
+# WovenGames: a game added outside Steam (WOVEN_NO_STEAM=1, set by the app) starts directly;
+# the steam.exe shim sets up a Steam client connection such a game has no use for.
+if [ "$WOVEN_NO_STEAM" = 1 ]; then
+  echo "=== not a Steam game: starting without the steam.exe shim ===" >> "$log" 2>&1 || true
+  set -- --args "$@"
+else
+  set -- --args "$shim_exe" "$@"
+fi
 for name in $(env | sed -nE 's/^(Steam[A-Za-z0-9]*|WINEDLLPATH_PREPEND|(CX_GRAPHICS|CX_ACTIVE_GRAPHICS|CX_APPLEGPTK_|D3DM_|DXMT_|DXVK_|MTL_|ROSETTA_)[A-Z0-9_]*)=.*/\1/p'); do
   eval "value=\$$name"
   # shellcheck disable=SC2154 # eval assigns value on the line above

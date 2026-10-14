@@ -18,7 +18,7 @@ struct GamesView: View {
                 if model.games.isEmpty {
                     ContentUnavailableView("No Windows games installed",
                                            systemImage: "gamecontroller",
-                                           description: Text("Install a Windows game in Steam; it runs through WovenGames automatically."))
+                                           description: Text("Install a Windows game in Steam; it runs through WovenGames automatically. Games from elsewhere can be added with +."))
                 }
             }
 
@@ -32,6 +32,10 @@ struct GamesView: View {
             .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
         }
         .navigationTitle("Games")
+        .toolbar {
+            Button { model.addNonSteamGame() } label: { Label("Add Windows Game…", systemImage: "plus") }
+                .help("Add a Windows game from outside Steam (GOG, itch.io, …)")
+        }
         .onAppear {
             if selection == nil { selection = model.games.first?.id }
             showRequestedGame()
@@ -139,6 +143,7 @@ struct GameDetailView: View {
     @State private var runnerIDs: [String] = []
     @State private var snapshots: [PrefixSnapshot] = []
     @State private var pendingRestore: PrefixSnapshot?
+    @State private var confirmRemove = false
 
     static func snapshotLabel(_ s: PrefixSnapshot) -> String {
         let when = s.date.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? s.id
@@ -228,6 +233,9 @@ struct GameDetailView: View {
                         .disabled(model.busy != nil || !FileManager.default.fileExists(atPath: game.prefix.path(percentEncoded: false)))
                         Button("Reset Prefix…", role: .destructive) { confirmReset = true }
                             .disabled(!FileManager.default.fileExists(atPath: game.prefix.path(percentEncoded: false)))
+                        if NonSteamGames.isNonSteam(appID: game.appID) {
+                            Button("Remove from Library…", role: .destructive) { confirmRemove = true }
+                        }
                     }
                 } footer: {
                     Text("Settings apply at the next launch from Steam. Your settings win over WovenGames' recommendations, and launch options set in Steam win over both.")
@@ -257,6 +265,12 @@ struct GameDetailView: View {
             }
         } message: {
             Text("The current prefix goes to the Trash. Saves synced to Steam Cloud are not affected.")
+        }
+        .confirmationDialog("Remove \(game.name) from the library?", isPresented: $confirmRemove) {
+            Button("Remove, Keep Prefix") { Task { await model.removeNonSteamGame(game, deleteData: false) } }
+            Button("Remove and Delete Prefix", role: .destructive) { Task { await model.removeNonSteamGame(game, deleteData: true) } }
+        } message: {
+            Text("The game's own files stay where they are. Its prefix holds its Windows settings and any saves kept there.")
         }
         .onChange(of: settings) { _, new in
             guard let saved, new != saved else { return }
@@ -473,6 +487,8 @@ private struct SteamArtImage<Placeholder: View>: View {
             }
         }
         .task(id: key) {
+            // Steam has no art for a game added outside it
+            guard !NonSteamGames.isNonSteam(appID: appID) else { loaded = true; return }
             if let cached = ArtCache.shared.lookup(key) {
                 image = cached.image
                 loaded = true
