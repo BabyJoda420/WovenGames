@@ -21,10 +21,18 @@ public struct LaunchFinding: Equatable, Sendable, Identifiable {
         case openLaunchLog
     }
 
+    /// Where a finding comes from: the game's setup (engine, launch options), true before and
+    /// after any launch, or what the run log says about the last launch.
+    public enum Source: Sendable {
+        case setup
+        case lastRun
+    }
+
     public var severity: Severity
     public var title: String
     public var detail: String
     public var fix: Fix?
+    public var source: Source = .setup
 
     public var id: String { title }
 }
@@ -139,11 +147,11 @@ public enum LaunchDiagnosis {
         if run.foreignPrefix {
             out.append(.init(severity: .error, title: "The game's Windows environment came from another tool",
                              detail: "Its prefix was made by a different Wine build (for example CrossOver or an older WovenGames), and this engine cannot use it. Reset the prefix: saves synced to Steam Cloud come back, and the old prefix goes to the Trash.",
-                             fix: .resetPrefix))
+                             fix: .resetPrefix, source: .lastRun))
         } else if let file = run.stagingFailed {
             out.append(.init(severity: .error, title: "Engine files are missing",
                              detail: "WovenGames could not copy \(file) into the game's environment. Reinstalling the engine puts the files back.",
-                             fix: .installEngine))
+                             fix: .installEngine, source: .lastRun))
         } else if let stage = run.abortedStage {
             let fix: LaunchFinding.Fix = switch stage {
             case "bridge staging": .installEngine
@@ -152,14 +160,23 @@ public enum LaunchDiagnosis {
             }
             out.append(.init(severity: .error, title: "WovenGames stopped before starting the game",
                              detail: "Preparing the game failed during \"\(stage)\". \(fix == .resetPrefix ? "Resetting the game's prefix usually fixes this." : fix == .installEngine ? "Reinstalling the engine usually fixes this." : "The launch log has the details.")",
-                             fix: fix))
-        } else if let status = run.exitStatus, status != 0, !run.terminated, (run.seconds ?? 0) < 30 {
+                             fix: fix, source: .lastRun))
+        } else if let status = run.exitStatus, status != 0, !run.terminated,
+                  // no duration (an older launch script's log): it may have run for hours
+                  let seconds = run.seconds, seconds < 30 {
             let next = alternative(to: run.backend, runner: runner)
             out.append(.init(severity: .warning, title: "The game closed right after starting",
-                             detail: "It ran for \(run.seconds.map { "\($0) seconds" } ?? "a moment") and exited with status \(status). \(next.map { "Games often start with a different graphics backend: try \($0.label.components(separatedBy: " (").first ?? $0.rawValue)." } ?? "The launch log has the details.")",
-                             fix: next.map(LaunchFinding.Fix.switchBackend) ?? .openLaunchLog))
+                             detail: "It ran for \(seconds) seconds and exited with status \(status). \(next.map { "Games often start with a different graphics backend: try \($0.label.components(separatedBy: " (").first ?? $0.rawValue)." } ?? "The launch log has the details.")",
+                             fix: next.map(LaunchFinding.Fix.switchBackend) ?? .openLaunchLog, source: .lastRun))
         }
         return out.sorted { $0.severity > $1.severity }
+    }
+
+    /// The finding worth a notification when a game quits: the worst problem with the launch
+    /// that just ended. Setup findings (engine, launch options) were there before the launch
+    /// and are shown on the Games page instead. `findings` comes worst first, as findings() returns it.
+    public static func notifiable(_ findings: [LaunchFinding]) -> LaunchFinding? {
+        findings.first { $0.source == .lastRun && $0.severity >= .warning }
     }
 
     /// Another backend worth a try after a crash on `backend`.

@@ -521,6 +521,13 @@ final class LaunchDiagnosisTests: XCTestCase {
         XCTAssertEqual(LaunchDiagnosis.findings(run: clean, launchOptions: nil, runner: with, settings: GameSettings()), [])
     }
 
+    func testUnknownDurationIsNotAQuickCrash() throws {
+        // a run logged by v0.1's launch script ("status=N," without "after Ns") may have lasted hours
+        let old = try XCTUnwrap(SteamLibrary.lastRun(log: "=== wovengames run Sat Oct 10 18:00:00 CEST 2026 ===\ngraphics: dxmt from auto (d3d11)\n=== game exited status=1, killing wine prefix ===\n"))
+        XCTAssertNil(old.seconds)
+        XCTAssertEqual(LaunchDiagnosis.findings(run: old, launchOptions: nil, runner: try makeRunner(d3dmetal: true), settings: GameSettings()), [])
+    }
+
     func testTerminatedSessionIsNoProblem() throws {
         let r = run("""
         graphics: dxmt from auto (d3d11)
@@ -529,6 +536,39 @@ final class LaunchDiagnosisTests: XCTestCase {
         """)
         XCTAssertTrue(r.terminated)
         XCTAssertEqual(LaunchDiagnosis.findings(run: r, launchOptions: nil, runner: try makeRunner(d3dmetal: true), settings: GameSettings()), [])
+    }
+
+    func testFindingSourcesAndNotifiable() throws {
+        let without = try makeRunner(d3dmetal: false)
+        var settings = GameSettings()
+        settings.backend = .d3dmetal
+        let options = SteamLaunchOptions("MTL_HUD_ENABLED=1 %command% CX_GRAPHICS_BACKEND=d3dmetal")
+        // setup findings only (engine, launch options): nothing to notify about when the game quits
+        let clean = run("graphics: d3dmetal from settings\n=== game exited status=0 after 900s, killing wine prefix ===\n")
+        var f = LaunchDiagnosis.findings(run: clean, launchOptions: options, runner: without, settings: settings)
+        XCTAssertEqual(Set(f.map(\.title)), ["D3DMetal is not downloaded", "Steam cannot start the game with these launch options",
+                                             "Steam's launch options win over this page"])
+        XCTAssertTrue(f.allSatisfy { $0.source == .setup })
+        XCTAssertNil(LaunchDiagnosis.notifiable(f))
+
+        // a quick crash comes from the last run: that is the one to notify, even below setup errors
+        let crash = run("graphics: d3dmetal from settings\n=== wine exited status=3 ===\n=== game exited status=3 after 12s, killing wine prefix ===\n")
+        XCTAssertEqual(crash.exitStatus, 3)
+        f = LaunchDiagnosis.findings(run: crash, launchOptions: options, runner: without, settings: settings)
+        XCTAssertEqual(f.first?.source, .setup, "setup errors sort first")
+        let worst = try XCTUnwrap(LaunchDiagnosis.notifiable(f))
+        XCTAssertEqual(worst.title, "The game closed right after starting")
+        XCTAssertEqual(worst.source, .lastRun)
+
+        // every run-log finding is marked as such
+        let runner = try makeRunner(d3dmetal: true)
+        for body in ["=== prefix ntdll is aa64 and this compatibility tool wants 8664 ===\n",
+                     "=== failed to stage steamclient64.dll ===\n",
+                     "=== aborted during startup (exit 2) before launch ===\n"] {
+            let found = LaunchDiagnosis.findings(run: run(body), launchOptions: nil, runner: runner, settings: GameSettings())
+            XCTAssertEqual(found.map(\.source), [.lastRun], body)
+            XCTAssertEqual(LaunchDiagnosis.notifiable(found), found.first, body)
+        }
     }
 
     func testLaunchOptionFindings() throws {
@@ -620,6 +660,70 @@ final class LastRunTests: XCTestCase {
     }
 }
 
+// MARK: - Launch script
+
+final class RunScriptTests: XCTestCase {
+    /// notproton/dylib/feats/compat_run.sh in this checkout
+    static let script = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent().appending(path: "notproton/dylib/feats/compat_run.sh")
+
+    /// global.env is the user's to edit (the app writes only the FPS line). A malformed line must
+    /// not run as a command through the script's eval, nor stop every game before its log exists.
+    /// `getcompatpath` reads global.env and exits before anything else happens.
+    func testMalformedGlobalEnvLinesAreSkipped() throws {
+        let home = try makeTempDir("wvh")
+        let marker = home.appending(path: "ran")
+        try put("""
+        WINE}; touch \(marker.path(percentEncoded: false)); : ${X=1
+        MTL_HUD_ENABLED =1
+        WOVEN_RETINA=1
+
+        """, home.appending(path: "Library/Application Support/WovenGames/global.env"))
+        let env = ["HOME": home.path(percentEncoded: false), "PATH": "/usr/bin:/bin", "STEAM_COMPAT_DATA_PATH": "/compat/42"]
+        let r = Shell.capture("/bin/sh", [Self.script.path(percentEncoded: false), "getcompatpath"], environment: env)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path(percentEncoded: false)), "a global.env line ran as a command")
+        XCTAssertEqual(r.status, 0, r.output)
+        XCTAssertEqual(r.output, "/compat/42\n")
+    }
+}
+
+// MARK: - Library
+
+final class LibraryDuplicateTests: XCTestCase {
+    /// The app keys games by app ID (Dictionary(uniqueKeysWithValues:), List ids): one game
+    /// found twice would crash it at every refresh.
+    func testAGameInTwoLibrariesIsListedOnce() throws {
+        let home = try makeTempDir("wvl")
+        let paths = Paths(home: home, steamApp: home.appending(path: "Steam.app"))
+        let main = paths.steam.userData, external = home.appending(path: "Volumes/Games/SteamLibrary")
+        // the default library a second time (trailing slash), and a library holding a copy of the game
+        try put("""
+        "libraryfolders"
+        {
+        \t"0" { "path" "\(main.path(percentEncoded: false))/" }
+        \t"1" { "path" "\(external.path(percentEncoded: false))" }
+        }
+        """, main.appending(path: "steamapps/libraryfolders.vdf"))
+        for library in [main, external] {
+            let steamapps = library.appending(path: "steamapps")
+            try put("x", steamapps.appending(path: "common/Double Exposure/game.exe"))
+            try put("""
+            "AppState"
+            {
+            \t"appid"\t\t"1874000"
+            \t"name"\t\t"Life is Strange: Double Exposure"
+            \t"installdir"\t\t"Double Exposure"
+            }
+            """, steamapps.appending(path: "appmanifest_1874000.acf"))
+        }
+        let games = SteamLibrary(paths: paths).windowsGames()
+        XCTAssertEqual(games.map(\.appID), ["1874000"])
+        // the default library wins
+        XCTAssertEqual(games.first?.installDir.path(percentEncoded: false),
+                       main.appending(path: "steamapps/common/Double Exposure").path(percentEncoded: false))
+    }
+}
+
 // MARK: - Art
 
 final class SteamArtTests: XCTestCase {
@@ -701,6 +805,28 @@ final class GameSessionsTests: XCTestCase {
         try put("\(steamStarted.processIdentifier)\n", launchers.appending(path: "400/run.pid"))
         XCTAssertEqual(sessions.runScript(appID: "400"), steamStarted.processIdentifier)
         XCTAssertEqual(sessions.running(), ["200", "400"])
+    }
+
+    /// A run script killed outright (Steam's Stop gives up waiting) leaves its run.pid behind.
+    /// When that pid later belongs to another game's run script, the stale file must not count:
+    /// Force Quit would stop the wrong game.
+    func testStalePidFileOfAnotherRunScriptIsIgnored() throws {
+        let home = try makeTempDir()
+        let sessions = GameSessions(paths: Paths(home: home, steamApp: home.appending(path: "Steam.app")))
+        let script = home.appending(path: "compat_run")
+        try put("sleep 30\nexit 0\n", script)
+        let process = Process()
+        process.executableURL = URL(filePath: "/bin/sh")
+        process.arguments = [script.path(percentEncoded: false)]
+        try process.run()
+        addTeardownBlock { Shell.capture("/usr/bin/pkill", ["-P", "\(process.processIdentifier)"]); process.terminate(); process.waitUntilExit() }
+        let pid = process.processIdentifier
+        // game 31's script wrote its file after it started; game 3's file is from an hour ago
+        try put("\(pid)\n", sessions.launchers.appending(path: "31/run.pid"))
+        try put("\(pid)\n", sessions.launchers.appending(path: "3/run.pid"), modified: Date(timeIntervalSinceNow: -3600))
+        XCTAssertEqual(sessions.runScript(appID: "31"), pid)
+        XCTAssertNil(sessions.runScript(appID: "3"), "written before this process existed")
+        XCTAssertEqual(sessions.running(), ["31"])
     }
 }
 
@@ -810,6 +936,30 @@ final class ProblemReportTests: XCTestCase {
         XCTAssertEqual(listing.status, 0, listing.output)
         XCTAssertTrue(listing.output.contains("\(folder.lastPathComponent)/summary.txt"), listing.output)
         XCTAssertTrue(listing.output.contains("\(folder.lastPathComponent)/logs/app.log"), listing.output)
+    }
+
+    /// The run log's Steam environment names the account even when loginusers.vdf does not
+    /// (another account, a missing or unreadable file).
+    func testSteamUserLinesAreRedactedWithoutLoginUsers() throws {
+        let home = try makeTempDir("wvr")
+        let paths = Paths(home: home, steamApp: home.appending(path: "Steam.app"))
+        let clean = Redactor(paths: paths).clean("SteamAppUser=secretlogin\nSteamUser=Secret_Login2\nSteamAppId=1874000\n")
+        XCTAssertFalse(clean.lowercased().contains("secret"), clean)
+        XCTAssertTrue(clean.contains("SteamAppUser=<steam account>\nSteamUser=<steam account>\nSteamAppId=1874000"), clean)
+    }
+
+    /// Only the report's own files go into the zip: no AppleDouble ("._") entries carrying the
+    /// files' extended attributes.
+    func testZipHoldsNoAppleDoubleFiles() throws {
+        let paths = try makeHome()
+        try put("app started\n", paths.logs.appending(path: "app.log"))
+        // what macOS adds to files apps write (TextEncoding comes from String.write)
+        Shell.capture("/usr/bin/xattr", ["-w", "com.example.test", "1", paths.logs.appending(path: "app.log").path(percentEncoded: false)])
+        let result = try ProblemReport(paths: paths, appVersion: "0.2.0").write(to: try makeTempDir("wvo"))
+        let listing = Shell.capture("/usr/bin/zipinfo", ["-1", result.zip.path(percentEncoded: false)])
+        XCTAssertEqual(listing.status, 0, listing.output)
+        XCTAssertTrue(listing.output.contains("logs/app.log"), listing.output)
+        XCTAssertFalse(listing.output.contains("._"), listing.output)
     }
 }
 
@@ -944,6 +1094,41 @@ final class SteamUpdateTests: XCTestCase {
             XCTFail("expected a timeout")
         } catch {
             XCTAssertEqual(error as? SteamUpdateError, .timedOut(installed: "100", target: "200"))
+        }
+        try assertPinned()
+    }
+
+    func testUnexpectedBuildStopsWaitingAndPins() async throws {
+        // Steam installs 300 (a beta, or a build Valve published meanwhile) instead of the checked 200
+        let steam = simulateSteam(installing: "300")
+        let started = Date()
+        do {
+            try await updater(installTimeout: 30).update(report())
+            XCTFail("expected unexpectedBuild")
+        } catch {
+            XCTAssertEqual(error as? SteamUpdateError, .unexpectedBuild(installed: "300", target: "200"))
+            let text = "\(error)"
+            XCTAssertTrue(text.contains("Steam installed 300 instead of 200"), text)
+            XCTAssertTrue(text.contains("has not checked 300"), text)
+            XCTAssertTrue(text.contains("kept on 300"), text)
+            XCTAssertTrue(text.contains("Restore Steam"), text)
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(started), 10, "stops at once, not at the install timeout")
+        await steam.value
+        XCTAssertEqual(SteamStatus(paths: paths.steam).clientBuild, "300")
+        try assertPinned()
+    }
+
+    func testFailedUnpinPinsAgain() async throws {
+        // the client's own steam.cfg cannot be changed: unpin removes the outer pin, then fails
+        let inner = paths.steam.innerClient
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: inner.path(percentEncoded: false))
+        addTeardownBlock { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: inner.path(percentEncoded: false)) }
+        do {
+            try await updater().update(report())
+            XCTFail("expected the unpin to fail")
+        } catch {
+            XCTAssertNil(error as? SteamUpdateError, "\(error)")
         }
         try assertPinned()
     }

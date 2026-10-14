@@ -34,6 +34,9 @@ if [ -r "$global_env" ]; then
     case "$line" in
       CX_GRAPHICS*=*|D3DM_*=*|DXMT_*=*|DXVK_*=*|MTL_*=*|NOTPROTON_*=*|ROSETTA_*=*|WINE*=*|WOVEN_*=*)
         name=${line%%=*}
+        # a hand edit like "NAME =1" is no variable name: eval would fail and end the script
+        # here, before it has a log (or run what follows the name as a command)
+        case "$name" in *[!A-Za-z0-9_]*) continue ;; esac
         eval "isset=\${$name+x}"
         # shellcheck disable=SC2154 # eval assigns isset on the line above
         [ -n "$isset" ] && continue
@@ -654,6 +657,8 @@ mkdir -p "$loader_root"
 printf '%s\n' "$$" > "$loader_root/run.pid" 2>/dev/null || true
 loader_app="$loader_root/$bundle_name.app"
 rm -rf "$loader_root"/*.app
+# the bundle's launcher writes wine's exit status here (open -W itself always exits 0)
+exit_status_file="$loader_root/exit.status"
 loader_contents="$loader_app/Contents"
 loader_macos="$loader_contents/MacOS"
 loader_res="$loader_contents/Resources"
@@ -804,7 +809,10 @@ if [ -n "\$STEAM_DYLD_INSERT_LIBRARIES" ]; then
 fi
 [ -n "\$WOVEN_GAME_CWD" ] && cd "\$WOVEN_GAME_CWD"
 "$WINELOADER" "\$@"
-exit \$?
+rc=\$?
+# open -W always exits 0: the run script reads the game's real exit status from here
+printf '%s\n' "\$rc" > "$exit_status_file" 2>/dev/null
+exit \$rc
 LAUNCHER
 chmod +x "$loader_macos/launcher"
 
@@ -862,8 +870,10 @@ kill_wine_prefix() {
 
 # Steam's "Exit Game" and the client shutting the game down both send a
 # termination signal to this run script, this handles it
+terminated=0
 # shellcheck disable=SC2329 # the trap below invokes this
 terminate() {
+  terminated=1
   echo "=== termination signal received, killing wine prefix ===" >> "$log" 2>&1 || true
   kill_wine_prefix
   [ -n "$open_pid" ] && kill "$open_pid" 2>/dev/null || true
@@ -914,6 +924,17 @@ set -- \
 lsregister="/System/Library/Frameworks/CoreServices.framework/Versions/A"
 lsregister="$lsregister/Frameworks/LaunchServices.framework/Support/lsregister"
 [ -x "$lsregister" ] && "$lsregister" -f "$loader_app" >> "$log" 2>&1 || true
+# wine's exit status as the bundle's launcher recorded it; a Stop or Force Quit keeps the
+# signal status instead, so a killed game never reads as a crash
+read_game_status() {
+  [ "$terminated" = 0 ] && [ -s "$exit_status_file" ] || return 0
+  game_status=$(head -n 1 "$exit_status_file" 2>/dev/null | tr -cd '0-9')
+  [ -n "$game_status" ] || return 0
+  status=$game_status
+  echo "=== wine exited status=$status ===" >> "$log" 2>&1 || true
+}
+
+rm -f "$exit_status_file"
 open -n -W -a "$loader_app" "$@" >> "$log" 2>&1 &
 open_pid=$!
 status=0
@@ -929,13 +950,16 @@ while :; do
   if ! kill -0 "$open_pid" 2>/dev/null; then
     wait "$open_pid" || status=$?
     echo "=== bundle exited status=$status ===" >> "$log" 2>&1 || true
-    if [ "$status" -le 128 ]; then
+    bundle_status=$status
+    read_game_status
+    if [ "$bundle_status" -le 128 ] && [ "$terminated" = 0 ]; then
       wait_prefix_idle
     fi
     break
   fi
   if [ "$seen" -eq 1 ] && [ "$idle" -ge 10 ]; then
     echo "=== game tree gone, ending session ===" >> "$log" 2>&1 || true
+    read_game_status
     break
   fi
   sleep 1
@@ -944,4 +968,4 @@ echo "=== game exited status=$status after $(( $(date +%s) - start_epoch ))s, ki
 kill_wine_prefix
 rm -f "$loader_root/run.pid"
 echo "=== wine prefix killed, session ending ===" >> "$log" 2>&1 || true
-exit $status
+exit "$status"

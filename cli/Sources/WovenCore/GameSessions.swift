@@ -19,12 +19,29 @@ public struct GameSessions: Sendable {
 
     /// The run script's pid for a game, if it is still the run script.
     public func runScript(appID: String) -> pid_t? {
-        guard let text = try? String(contentsOf: pidFile(appID), encoding: .utf8),
+        let file = pidFile(appID)
+        guard let text = try? String(contentsOf: file, encoding: .utf8),
               let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)), pid > 1 else { return nil }
-        // a stale file can name a pid that now belongs to something else. Steam starts the
-        // script as ".../compatibilitytools.d/wovengames-proton/./run".
+        // a stale file (the script was killed outright) can name a pid that now belongs to
+        // another process, even another game's run script: the script writes the file after
+        // it starts, so a process that started later is not the one that wrote it
+        if let written = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
+           let started = Self.startTime(of: pid), started > written.addingTimeInterval(1) {
+            return nil
+        }
+        // Steam starts the script as ".../compatibilitytools.d/wovengames-proton/./run"
         let command = Shell.capture("/bin/ps", ["-p", "\(pid)", "-o", "command="]).output
         return command.contains("/wovengames-proton/") || command.contains("compat_run") ? pid : nil
+    }
+
+    /// When a process started; nil when there is no such process.
+    static func startTime(of pid: pid_t) -> Date? {
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        guard sysctl(&mib, u_int(mib.count), &info, &size, nil, 0) == 0, size > 0 else { return nil }
+        let t = info.kp_proc.p_starttime
+        return Date(timeIntervalSince1970: TimeInterval(t.tv_sec) + TimeInterval(t.tv_usec) / 1_000_000)
     }
 
     /// App IDs of games whose launch script is running.

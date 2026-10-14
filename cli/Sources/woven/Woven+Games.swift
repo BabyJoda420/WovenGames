@@ -36,7 +36,26 @@ extension Woven.SteamCommand {
                 let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
                 guard answer == "y" || answer == "yes" else { print("cancelled"); return }
             }
+            // Ctrl-C or a kill while the pin is lifted would leave Steam free to update itself
+            let guards = Self.repinOnSignals(paths: updater.paths)
+            defer { guards.forEach { $0.cancel() } }
             do { try await updater.update(report) { print($0) } } catch { throw fail(error) }
+        }
+
+        /// Until cancelled: SIGINT or SIGTERM pins Steam again and exits 130.
+        static func repinOnSignals(paths: Paths) -> [DispatchSourceSignal] {
+            [SIGINT, SIGTERM].map { sig in
+                signal(sig, SIG_IGN)
+                let source = DispatchSource.makeSignalSource(signal: sig, queue: .global())
+                source.setEventHandler {
+                    FileHandle.standardError.write(Data("\ninterrupted: pinning Steam to its current build again\n".utf8))
+                    try? SteamPatcher(paths: paths).pin()
+                    Darwin.exit(130)
+                }
+                source.setCancelHandler { signal(sig, SIG_DFL) }
+                source.resume()
+                return source
+            }
         }
     }
 }

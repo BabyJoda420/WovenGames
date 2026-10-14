@@ -34,6 +34,7 @@ struct MenuBarContent: View {
                 Button("Force Quit \(game.name)") {
                     Task { await model.forceQuit(game) }
                 }
+                .disabled(model.busy != nil)
             }
             if !running.isEmpty {
                 Divider()
@@ -45,6 +46,7 @@ struct MenuBarContent: View {
             } else {
                 ForEach(recent) { game in
                     Button(game.name) { model.play(game) }
+                        .disabled(model.busy != nil)
                 }
             }
             Divider()

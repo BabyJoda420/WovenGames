@@ -34,7 +34,10 @@ public struct Redactor: Sendable {
     }
 
     public func clean(_ text: String) -> String {
-        var out = text
+        // Steam's environment in the run log names the account, whether or not loginusers.vdf does
+        var out = text.replacing(try! Regex(#"\b(SteamUser|SteamAppUser)=[^\s"'<]+"#)) { match in
+            "\(match.output[1].substring ?? "SteamUser")=<steam account>"
+        }
         for (find, replace) in literals where !find.isEmpty {
             out = out.replacingOccurrences(of: find, with: replace, options: .caseInsensitive)
         }
@@ -113,7 +116,8 @@ public struct ProblemReport: Sendable {
 
         let zip = directory.appending(path: "\(name).zip")
         try? fm.removeItem(at: zip)
-        let r = Shell.capture("/usr/bin/ditto", ["-c", "-k", "--keepParent", folder.path(percentEncoded: false), zip.path(percentEncoded: false)])
+        // --norsrc: no AppleDouble "._" copies of the files' extended attributes in the zip
+        let r = Shell.capture("/usr/bin/ditto", ["-c", "-k", "--norsrc", "--keepParent", folder.path(percentEncoded: false), zip.path(percentEncoded: false)])
         guard r.status == 0 else { throw ReleaseError.badRelease("could not zip the report: \(r.output)") }
         return Output(folder: folder, zip: zip)
     }

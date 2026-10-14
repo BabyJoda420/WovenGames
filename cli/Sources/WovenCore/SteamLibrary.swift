@@ -68,6 +68,9 @@ public struct SteamLibrary: Sendable {
     public func windowsGames() -> [InstalledGame] {
         let fm = FileManager.default
         var games: [InstalledGame] = []
+        // a library listed twice, or a copy of a game in a second library: one entry per app
+        // ID (the default library first), since the app keys games by it
+        var seen: Set<String> = []
         for folder in folders() {
             let steamapps = folder.appending(path: "steamapps")
             let manifests = ((try? fm.contentsOfDirectory(atPath: steamapps.path(percentEncoded: false))) ?? [])
@@ -78,13 +81,14 @@ public struct SteamLibrary: Sendable {
                       let appID = state["appid"]?.string,
                       let name = state["name"]?.string,
                       let dir = state["installdir"]?.string,
-                      !Self.notGames.contains(appID)
+                      !Self.notGames.contains(appID), !seen.contains(appID)
                 else { continue }
                 let installDir = steamapps.appending(path: "common/\(dir)")
                 let compatData = steamapps.appending(path: "compatdata/\(appID)")
                 // a game that already ran under a compat tool counts even mid-update
                 let ranBefore = fm.fileExists(atPath: compatData.appending(path: "pfx").path(percentEncoded: false))
                 guard ranBefore || Self.hasWindowsExecutable(installDir) else { continue }
+                seen.insert(appID)
                 games.append(InstalledGame(
                     appID: appID, name: name, installDir: installDir,
                     compatData: compatData,

@@ -55,9 +55,9 @@ extension AppModel {
         }
     }
 
-    /// Installs availableUpdate: the engine first, then the app, which replaces this one and
-    /// restarts. Where this copy cannot be replaced (a read-only folder, a development build in
-    /// cli/.build), the new app is shown in Finder instead.
+    /// Installs availableUpdate: downloads the app, installs the engine, then the new app
+    /// replaces this one and restarts. Where this copy cannot be replaced (a read-only folder,
+    /// a development build in cli/.build), the new app is shown in Finder instead.
     func installUpdate() async {
         guard let release = availableUpdate else { return }
         let version = release.version?.description ?? release.tag_name
@@ -67,14 +67,17 @@ extension AppModel {
         await performAsync("Installing WovenGames \(version)") { [self] log in
             // the engine is replaced under a running game otherwise
             guard !RunnerStore(paths: paths).inUse() else { throw AppUpdateError.gameRunning }
+            // the app is downloaded and checked first: if that fails, the engine stays the one
+            // this app was made with
+            let newApp = release.appArchive == nil ? nil
+                : try await AppUpdate.download(release, staging: paths.support.appending(path: "updates/\(version)"), log: log)
             if let engine = release.engineArchive {
                 try await ReleaseInstaller(paths: paths).install(archive: engine, log: log)
             }
-            guard release.appArchive != nil else {
+            guard let newApp else {
                 log("this release only updates the engine")
                 return
             }
-            let newApp = try await AppUpdate.download(release, staging: paths.support.appending(path: "updates/\(version)"), log: log)
             let folder = running.deletingLastPathComponent()
             if devBuild {
                 log("this is a development build, so it stays; the new app is shown in Finder")
@@ -117,6 +120,8 @@ extension AppModel {
     /// Moves Steam to Valve's newest build when it is known to work, then pins it again.
     func updateSteam() async {
         let paths = paths
+        steamUpdateInProgress = true
+        defer { steamUpdateInProgress = false }
         await performAsync("Updating Steam") { log in
             // the report on screen can be hours old
             let report = await SteamBuilds.fullReport(paths: paths)
