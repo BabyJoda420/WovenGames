@@ -3,7 +3,11 @@ import WovenCore
 
 @main
 struct WovenGamesApp: App {
-    @State private var model = AppModel()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @AppStorage(AppModel.Setting.showMenuBar) private var showMenuBar = true
+
+    /// owned by the app delegate, which needs it for Dock clicks
+    private var model: AppModel { appDelegate.model }
 
     var body: some Scene {
         Window("WovenGames", id: "main") {
@@ -31,6 +35,45 @@ struct WovenGamesApp: App {
                 Button("Refresh") { Task { await model.refresh() } }
                     .keyboardShortcut("r")
             }
+            HelpCommands()
+        }
+
+        Window("Report a Problem", id: "report") {
+            ReportProblemView()
+                .environment(model)
+                .onAppear { AppDelegate.showInDock() }
+        }
+        .windowResizability(.contentSize)
+
+        Settings {
+            SettingsView()
+                .environment(model)
+                .onAppear { AppDelegate.showInDock() }
+        }
+
+        MenuBarExtra(isInserted: $showMenuBar) {
+            MenuBarContent().environment(model)
+        } label: {
+            MenuBarLabel().environment(model)
+        }
+        .menuBarExtraStyle(.menu)
+    }
+}
+
+/// Help → WovenGames Help (the README) and Report a Problem…
+struct HelpCommands: Commands {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(replacing: .help) {
+            Button("WovenGames Help") {
+                NSWorkspace.shared.open(URL(string: "https://github.com/BabyJoda420/WovenGames#readme")!)
+            }
+            Button("Report a Problem…") {
+                AppDelegate.showInDock()
+                openWindow(id: "report")
+                NSApp.activate()
+            }
         }
     }
 }
@@ -56,6 +99,8 @@ struct ContentView: View {
                 set: { savedSection = ($0 ?? .status).rawValue })
     }
 
+    @Environment(\.openWindow) private var openWindow
+
     var body: some View {
         NavigationSplitView {
             List(SidebarItem.allCases, id: \.self, selection: section) { item in
@@ -77,6 +122,11 @@ struct ContentView: View {
                 }
                 .disabled(model.busy != nil)
             }
+        }
+        .onAppear { AppDelegate.showInDock() }
+        .task {
+            // lets a notification or the menu bar reopen this window after it was closed
+            model.setMainWindowOpener(openWindow)
         }
     }
 }
