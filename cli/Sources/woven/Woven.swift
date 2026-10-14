@@ -18,7 +18,7 @@ extension Woven {
         static let configuration = CommandConfiguration(abstract: "Check whether this Mac is ready to play.")
 
         func run() throws {
-            let checks = WovenCore.Doctor.run()
+            let checks = WovenCore.Doctor.run(appManagement: true)
             let width = checks.map(\.title.count).max() ?? 0
             for check in checks {
                 let mark = switch check.level {

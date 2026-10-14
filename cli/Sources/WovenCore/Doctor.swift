@@ -10,7 +10,9 @@ public struct Check: Sendable {
 }
 
 public enum Doctor {
-    public static func run(paths: Paths = Paths()) -> [Check] {
+    /// - Parameter appManagement: also probe the App Management permission of the app running
+    ///   this (Terminal for `woven doctor`). The app probes on its own and leaves it off.
+    public static func run(paths: Paths = Paths(), appManagement: Bool = false) -> [Check] {
         var checks: [Check] = []
         func add(_ level: Check.Level, _ title: String, _ detail: String) {
             checks.append(Check(level: level, title: title, detail: detail))
@@ -76,6 +78,17 @@ public enum Doctor {
                 }
             case .notProton: add(.info, "  Steam Play hook", "NotProton is installed; `woven steam patch` takes it over")
             case .other(let lib): add(.warn, "  Steam Play hook", "unknown library injected: \(lib)")
+            }
+            if appManagement {
+                // only patching and updating the hook write into Steam.app
+                let hookReady = steam.injection == .wovenGames && SteamPatcher(paths: paths).deployedHookIsCurrent
+                switch AppManagement.probe(steamApp: paths.steamApp) {
+                case .granted: add(.ok, "  App Management", "allowed for this terminal")
+                case .denied: add(hookReady ? .info : .warn, "  App Management",
+                                  "off for this terminal; `woven steam patch` needs it (System Settings > Privacy & Security > App Management)")
+                case .notWritable(let why): add(hookReady ? .info : .warn, "  App Management", "Steam.app is not writable: \(why)")
+                case .steamMissing: break
+                }
             }
             switch steam.pin {
             case .full: add(.warn, "  Update pin", "BootStrapperInhibitAll: Steam never updates, which can stop it from signing in; prefer `woven steam pin`")
