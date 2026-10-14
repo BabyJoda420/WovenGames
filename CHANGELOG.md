@@ -2,6 +2,8 @@
 
 What changed in each WovenGames release, newest first. Each release on GitHub shows its section of this file.
 
+## Unreleased
+
 ## 0.3.0-beta.1 — 2026-10-14
 
 ### New

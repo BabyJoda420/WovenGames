@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Common problems & troubleshooting
+    url: https://github.com/BabyJoda420/WovenGames#problems
+    about: Check the README for answers to common questions and fixes before opening an issue.
