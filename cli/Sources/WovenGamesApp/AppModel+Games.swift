@@ -112,19 +112,64 @@ extension AppModel {
         // the detected backend only matters for Automatic; the scan reads the game's executables
         let detected = settings.backend == .auto
             ? BackendDetector.detect(launchTarget: nil, installDir: game.installDir).backend : nil
+        let isUE = LaunchDiagnosis.isUnrealEngine(installDir: game.installDir)
         return LaunchDiagnosis.findings(run: SteamLibrary.lastRun(of: game),
                                         launchOptions: SteamLaunchOptions.read(appID: game.appID, paths: paths),
-                                        runner: try? RunnerStore(paths: paths).current(),
+                                        runner: RunnerStore(paths: paths).runner(for: settings),
                                         settings: settings,
-                                        detected: detected)
+                                        detected: detected,
+                                        isUnreal: isUE)
     }
 
     // MARK: play and stop
 
-    /// Starts the game through Steam, which runs it with WovenGames.
+    /// Starts the game through Steam, which runs it with WovenGames; a game added outside
+    /// Steam goes through the same run script directly.
     func play(_ game: InstalledGame) {
+        if NonSteamGames.isNonSteam(appID: game.appID) {
+            guard let entry = NonSteamGames(paths: paths).list().first(where: { $0.id == game.appID }) else { return }
+            do {
+                try NonSteamLaunch(game: entry, paths: paths).start()
+                appLog("started \(entry.name) (not on Steam)")
+            } catch {
+                self.error = "Could not start \(entry.name): \(error)"
+            }
+            return
+        }
         guard let url = URL(string: "steam://rungameid/\(game.appID)") else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    /// Asks for a Windows .exe and adds it to the library.
+    func addNonSteamGame() {
+        let panel = NSOpenPanel()
+        panel.title = "Add a Windows Game"
+        panel.message = "Choose the game's .exe. It runs through WovenGames like a Steam game, outside Steam."
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = []
+        panel.allowsOtherFileTypes = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard url.pathExtension.lowercased() == "exe" else {
+            error = "\(url.lastPathComponent) is not a Windows program (.exe)."
+            return
+        }
+        do {
+            let added = try NonSteamGames(paths: paths).add(exe: url)
+            appLog("added \(added.name) (\(added.id)) from \(url.path(percentEncoded: false))")
+            requestedGame = added.id
+            Task { await refresh() }
+        } catch {
+            self.error = "Could not add \(url.lastPathComponent): \(error)"
+        }
+    }
+
+    func removeNonSteamGame(_ game: InstalledGame, deleteData: Bool) async {
+        let paths = paths
+        await perform("Removing \(game.name)") { log in
+            try NonSteamGames(paths: paths).remove(id: game.appID, deleteData: deleteData)
+            log(deleteData ? "removed \(game.name) and its prefix" : "removed \(game.name); its prefix stays in \(NonSteamGames(paths: paths).compatData(id: game.appID).path(percentEncoded: false))")
+        }
     }
 
     /// Stops a game that hangs, the way Steam's Stop does, harder if that does not work.

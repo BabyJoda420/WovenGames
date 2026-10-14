@@ -6,8 +6,8 @@ import WovenCore
 struct Woven: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "WovenGames: play Windows games on Apple Silicon.",
-        version: "0.2.1",
-        subcommands: [Doctor.self, Install.self, Setup.self, RunnerCommand.self, PrefixCommand.self, BackendCommand.self, Run.self, SteamCommand.self, GamesCommand.self, CompatCommand.self, Update.self, Report.self]
+        version: "0.3.0-beta.1",
+        subcommands: [Doctor.self, Install.self, Setup.self, Uninstall.self, RunnerCommand.self, PrefixCommand.self, BackendCommand.self, Run.self, SteamCommand.self, GamesCommand.self, SnapshotCommand.self, CompatCommand.self, Update.self, Report.self]
     )
 }
 
@@ -18,7 +18,7 @@ extension Woven {
         static let configuration = CommandConfiguration(abstract: "Check whether this Mac is ready to play.")
 
         func run() throws {
-            let checks = WovenCore.Doctor.run()
+            let checks = WovenCore.Doctor.run(appManagement: true)
             let width = checks.map(\.title.count).max() ?? 0
             for check in checks {
                 let mark = switch check.level {
@@ -79,6 +79,67 @@ extension Woven {
     }
 }
 
+// MARK: - uninstall
+
+extension Woven {
+    struct Uninstall: ParsableCommand {
+        static let configuration = CommandConfiguration(
+            abstract: "Uninstall WovenGames: restore Steam, remove the compat tool, and remove runtime data.",
+            discussion: "Keeps game prefixes (saves) by default. Use --delete-prefixes to remove them as well."
+        )
+
+        @Flag(name: .long, help: "Delete Steam game prefixes and saves created by WovenGames.")
+        var deletePrefixes = false
+
+        @Flag(name: .long, help: "Show what would be removed without making changes.")
+        var dryRun = false
+
+        @Flag(name: .shortAndLong, help: "Do not ask for confirmation.")
+        var yes = false
+
+        func run() throws {
+            let uninstaller = Uninstaller(deletePrefixes: deletePrefixes)
+            let plan = uninstaller.plan()
+
+            if !plan.runningGames.isEmpty { throw UninstallerError.gameRunning(plan.runningGames) }
+            if plan.runnerInUse { throw UninstallerError.runnerInUse }
+
+            print("WovenGames Uninstall Plan:")
+            if plan.descriptions.isEmpty {
+                print("  (nothing to remove)")
+            } else {
+                for desc in plan.descriptions {
+                    print("  • \(desc)")
+                }
+            }
+            if !deletePrefixes {
+                print("  • Keep game prefixes and saves in Steam library")
+            }
+            if let dev = plan.developerTree, let size = plan.developerTreeSize {
+                print("  • Keep engine build tree at \(dev.path(percentEncoded: false)) (\(Uninstaller.formatBytes(size)))")
+            }
+
+            if dryRun {
+                print("\ndry run: no changes made")
+                return
+            }
+
+            if !yes {
+                print("\nProceed with uninstall? [y/N] ", terminator: "")
+                let answer = readLine()?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
+                guard answer == "y" || answer == "yes" else {
+                    print("cancelled")
+                    return
+                }
+            }
+
+            print("")
+            try uninstaller.run(plan: plan) { print($0) }
+            print("done")
+        }
+    }
+}
+
 // MARK: - runner
 
 extension Woven {
@@ -124,6 +185,9 @@ extension Woven {
                         throw ValidationError("no built runner in \(dist.path(percentEncoded: false)); run engine/scripts/build-all.sh first")
                     }
                     source = newest
+                }
+                if (try? RunnerStore().current()) != nil {
+                    PrefixSnapshots.beforeEngineUpdate(paths: Paths()) { print($0) }
                 }
                 let runner = try RunnerStore().install(from: source, link: link)
                 print("installed and selected \(runner.id)")

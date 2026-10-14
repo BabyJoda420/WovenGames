@@ -86,7 +86,7 @@ final class AppModel {
         let snapshot = await Task.detached {
             (WovenCore.Doctor.run(paths: paths),
              SteamStatus(paths: paths.steam),
-             SteamLibrary(paths: paths).windowsGames(),
+             SteamLibrary(paths: paths).windowsGames() + NonSteamGames(paths: paths).installedGames(),
              try? RunnerStore(paths: paths).current(),
              FileManager.default.fileExists(atPath: EngineBuild.locate(paths: paths).root
                 .appending(path: "dist/runners/selfbuilt-cx26.3-r1/runner.json").path(percentEncoded: false)),

@@ -27,6 +27,12 @@ struct WovenGamesApp: App {
         }
         .windowResizability(.contentMinSize)
         .commands {
+            CommandGroup(before: .appTermination) {
+                Button("Uninstall WovenGames…") {
+                    model.promptUninstall()
+                }
+                Divider()
+            }
             CommandGroup(after: .windowArrangement) {
                 Button("Setup Assistant…") { model.showSetup = true }
                     .keyboardShortcut("s", modifiers: [.command, .shift])

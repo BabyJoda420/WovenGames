@@ -3,6 +3,7 @@
  * Exit code: 0 when every requested API produced a device. */
 #define COBJMACROS
 #define INITGUID
+#define WIDL_C_INLINE_WRAPPERS  /* GetAdapterLuid returns a struct */
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
@@ -45,6 +46,40 @@ static int probe_d3d11(void)
     return 0;
 }
 
+/* What the D3D12 device's adapter reports as its video memory budget, and how long a call
+ * takes: Unreal Engine 5 polls this every frame and waits while usage is over budget. */
+static void video_memory(ID3D12Device *dev)
+{
+    LUID luid = ID3D12Device_GetAdapterLuid(dev);
+    IDXGIFactory4 *factory;
+    IDXGIAdapter3 *ad;
+    if (FAILED(CreateDXGIFactory1(&IID_IDXGIFactory4, (void **)&factory))) { printf("  video memory: no IDXGIFactory4\n"); return; }
+    if (FAILED(IDXGIFactory4_EnumAdapterByLuid(factory, luid, &IID_IDXGIAdapter3, (void **)&ad)))
+    {
+        printf("  video memory: no IDXGIAdapter3 for the device's adapter\n");
+        IDXGIFactory4_Release(factory);
+        return;
+    }
+    for (int group = 0; group < 2; group++)
+    {
+        DXGI_QUERY_VIDEO_MEMORY_INFO info = {0};
+        HRESULT hr = IDXGIAdapter3_QueryVideoMemoryInfo(ad, 0, group ? DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL
+                                                                     : DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &info);
+        printf("  video memory %-9s hr=%#lx budget=%llu MB usage=%llu MB available_for_reservation=%llu MB\n",
+               group ? "non-local" : "local", (unsigned long)hr, (unsigned long long)info.Budget >> 20,
+               (unsigned long long)info.CurrentUsage >> 20, (unsigned long long)info.AvailableForReservation >> 20);
+    }
+    LARGE_INTEGER freq, t0, t1;
+    DXGI_QUERY_VIDEO_MEMORY_INFO info;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&t0);
+    for (int i = 0; i < 1000; i++) IDXGIAdapter3_QueryVideoMemoryInfo(ad, 0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &info);
+    QueryPerformanceCounter(&t1);
+    printf("  video memory: 1000 queries took %.1f ms\n", (t1.QuadPart - t0.QuadPart) * 1000.0 / freq.QuadPart);
+    IDXGIAdapter3_Release(ad);
+    IDXGIFactory4_Release(factory);
+}
+
 static int probe_d3d12(void)
 {
     ID3D12Device *dev = NULL;
@@ -54,6 +89,7 @@ static int probe_d3d12(void)
     D3D12_FEATURE_DATA_D3D12_OPTIONS5 o5 = {0};
     if (SUCCEEDED(ID3D12Device_CheckFeatureSupport(dev, D3D12_FEATURE_D3D12_OPTIONS5, &o5, sizeof(o5))))
         printf("  raytracing tier=%d\n", o5.RaytracingTier);
+    video_memory(dev);
     module_path("d3d12.dll");
     module_path("dxgi.dll");
     ID3D12Device_Release(dev);

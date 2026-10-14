@@ -18,6 +18,7 @@ public struct LaunchFinding: Equatable, Sendable, Identifiable {
         /// corrected launch options, for the user to paste into Steam
         case launchOptions(String)
         case switchBackend(GameSettings.BackendChoice)
+        case useSettings(backend: GameSettings.BackendChoice, gameArgs: String)
         case openLaunchLog
     }
 
@@ -33,8 +34,21 @@ public struct LaunchFinding: Equatable, Sendable, Identifiable {
     public var detail: String
     public var fix: Fix?
     public var source: Source = .setup
+    public var misplacedSettings: [String] = []
+    public var cleanedOptions: String? = nil
 
     public var id: String { title }
+
+    public init(severity: Severity, title: String, detail: String, fix: Fix? = nil, source: Source = .setup,
+                misplacedSettings: [String] = [], cleanedOptions: String? = nil) {
+        self.severity = severity
+        self.title = title
+        self.detail = detail
+        self.fix = fix
+        self.source = source
+        self.misplacedSettings = misplacedSettings
+        self.cleanedOptions = cleanedOptions
+    }
 }
 
 /// A game's launch options in Steam (Properties → General), from localconfig.vdf.
@@ -82,6 +96,16 @@ public struct SteamLaunchOptions: Equatable, Sendable {
         return (before + ["%command%"] + after + misplacedSettings.filter { !after.contains($0) }).joined(separator: " ")
     }
 
+    /// The same options with misplaced settings removed.
+    public var cleaned: String {
+        let t = tokens
+        guard hasCommand else { return raw }
+        let misplaced = Set(misplacedSettings)
+        let before = t.prefix(while: { $0 != "%command%" }).filter { !misplaced.contains($0) }
+        let after = t.drop(while: { $0 != "%command%" }).dropFirst()
+        return (before + ["%command%"] + after).joined(separator: " ")
+    }
+
     /// Reads the options for `appID`, from the most recently used Steam account on this Mac.
     public static func read(appID: String, paths: Paths = Paths()) -> SteamLaunchOptions? {
         let userdata = paths.steam.userData.appending(path: "userdata")
@@ -111,9 +135,52 @@ public struct SteamLaunchOptions: Equatable, Sendable {
 }
 
 public enum LaunchDiagnosis {
+    /// Whether an installed game was built with Unreal Engine (depth up to 4).
+    public static func isUnrealEngine(installDir: URL) -> Bool {
+        let fm = FileManager.default
+        let rootPath = installDir.path(percentEncoded: false)
+        guard fm.fileExists(atPath: rootPath) else { return false }
+
+        let directEngineBinaries = installDir.appending(path: "Engine/Binaries")
+        if fm.fileExists(atPath: directEngineBinaries.path(percentEncoded: false)) {
+            return true
+        }
+
+        guard let enumerator = fm.enumerator(at: installDir,
+                                             includingPropertiesForKeys: [.isDirectoryKey],
+                                             options: [.skipsHiddenFiles]) else { return false }
+        while let file = enumerator.nextObject() as? URL {
+            if enumerator.level > 4 {
+                enumerator.skipDescendants()
+                continue
+            }
+            let isDir = (try? file.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+            let name = file.lastPathComponent
+            if isDir {
+                if name.lowercased() == "binaries" && file.deletingLastPathComponent().lastPathComponent.lowercased() == "engine" {
+                    return true
+                }
+            } else {
+                if name.hasSuffix("-Shipping.exe") || name.hasSuffix("-shipping.exe") {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    /// Appends `arg` to `existing` arguments if `existing` does not already contain it.
+    public static func addingArg(_ arg: String, to existing: String) -> String {
+        let trimmed = existing.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty { return arg }
+        let tokens = trimmed.split(whereSeparator: \.isWhitespace).map(String.init)
+        if tokens.contains(arg) { return trimmed }
+        return "\(trimmed) \(arg)"
+    }
+
     /// Everything worth telling the player about this game's last launch, worst first.
     public static func findings(run: LastRun?, launchOptions: SteamLaunchOptions?, runner: Runner?,
-                                settings: GameSettings, detected: Backend? = nil) -> [LaunchFinding] {
+                                settings: GameSettings, detected: Backend? = nil, isUnreal: Bool = false) -> [LaunchFinding] {
         var out: [LaunchFinding] = []
 
         if runner == nil {
@@ -132,7 +199,9 @@ public enum LaunchDiagnosis {
             if !misplaced.isEmpty {
                 out.append(.init(severity: .error, title: "Steam cannot start the game with these launch options",
                                  detail: "\(misplaced.joined(separator: " ")) comes before %command%. On a Mac, Steam then looks for a program with that name and fails (\"OS Error 260\"). Settings belong after %command%; copy the corrected options into the game's Properties → General → Launch Options in Steam.",
-                                 fix: .launchOptions(options.corrected)))
+                                 fix: .launchOptions(options.corrected),
+                                 misplacedSettings: misplaced,
+                                 cleanedOptions: options.cleaned))
             }
             let overriding = options.settings.filter { $0.hasPrefix("CX_GRAPHICS_BACKEND=") || $0.hasPrefix("MTL_HUD_ENABLED=") || $0.hasPrefix("WOVEN_RETINA=") }
             if !overriding.isEmpty {
@@ -165,9 +234,23 @@ public enum LaunchDiagnosis {
                   // no duration (an older launch script's log): it may have run for hours
                   let seconds = run.seconds, seconds < 30 {
             let next = alternative(to: run.backend, runner: runner)
+            let fix: LaunchFinding.Fix?
+            let tryText: String?
+            if let next {
+                if next == .dxmt && isUnreal {
+                    fix = .useSettings(backend: .dxmt, gameArgs: "-dx11")
+                    tryText = "Games often start with a different graphics backend: try DXMT with -dx11."
+                } else {
+                    fix = .switchBackend(next)
+                    tryText = "Games often start with a different graphics backend: try \(next.label.components(separatedBy: " (").first ?? next.rawValue)."
+                }
+            } else {
+                fix = .openLaunchLog
+                tryText = nil
+            }
             out.append(.init(severity: .warning, title: "The game closed right after starting",
-                             detail: "It ran for \(seconds) seconds and exited with status \(status). \(next.map { "Games often start with a different graphics backend: try \($0.label.components(separatedBy: " (").first ?? $0.rawValue)." } ?? "The launch log has the details.")",
-                             fix: next.map(LaunchFinding.Fix.switchBackend) ?? .openLaunchLog, source: .lastRun))
+                             detail: "It ran for \(seconds) seconds and exited with status \(status). \(tryText ?? "The launch log has the details.")",
+                             fix: fix, source: .lastRun))
         }
         return out.sorted { $0.severity > $1.severity }
     }
@@ -188,5 +271,36 @@ public enum LaunchDiagnosis {
         case "wined3d": return .dxmt
         default: return nil
         }
+    }
+}
+
+// MARK: - GameSettings helpers for launch fixes
+
+extension GameSettings {
+    /// Applies misplaced launch option tokens (e.g. `["CX_GRAPHICS_BACKEND=dxmt", "MTL_HUD_ENABLED=1"]`)
+    /// into this game's settings. Known keys update typed fields; unknown keys are appended to `otherLines`.
+    public mutating func apply(tokens: [String]) {
+        for token in tokens {
+            let line = token.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty else { continue }
+            let parts = line.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+            guard !line.hasPrefix("#"), parts.count == 2, let key = parts.first, !key.isEmpty else {
+                if !otherLines.contains(line) { otherLines.append(line) }
+                continue
+            }
+            // the same keys as GameSettings(parsing:); an unknown key replaces its earlier line
+            guard !assign(key, parts[1]) else { continue }
+            if let idx = otherLines.firstIndex(where: { $0.hasPrefix("\(key)=") }) {
+                otherLines[idx] = line
+            } else {
+                otherLines.append(line)
+            }
+        }
+    }
+
+    /// Sets the backend and appends `gameArgs` if not already present.
+    public mutating func apply(backend: BackendChoice, gameArgs arg: String) {
+        self.backend = backend
+        self.gameArgs = LaunchDiagnosis.addingArg(arg, to: self.gameArgs)
     }
 }

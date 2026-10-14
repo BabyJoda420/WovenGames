@@ -66,7 +66,7 @@ public struct GameSessions: Sendable {
             log("the game did not stop; ending it")
         }
         // kill the prefix's Wine processes, then anything left from the game's launcher bundle
-        if let runner = try? RunnerStore(paths: paths).current() {
+        if let runner = RunnerStore(paths: paths).runner(for: GameSettings.load(appID: appID, paths: paths)) {
             var env = ProcessInfo.processInfo.environment
             env["WINEPREFIX"] = prefix.path(percentEncoded: false)
             _ = Shell.capture(runner.server.path(percentEncoded: false), ["-k"], environment: env)

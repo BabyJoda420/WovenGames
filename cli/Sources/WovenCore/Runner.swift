@@ -67,6 +67,17 @@ public struct RunnerStore: Sendable {
             .compactMap { try? Runner(root: paths.runners.appending(path: $0)) }
     }
 
+    /// The runner a game starts on: its own WOVEN_RUNNER when that is installed, else the
+    /// current one (the run script falls back the same way).
+    public func runner(for settings: GameSettings) -> Runner? {
+        let id = settings.runner
+        if !id.isEmpty, id != "current", !id.hasPrefix("."), !id.contains("/"),
+           let own = try? Runner(root: paths.runners.appending(path: id)) {
+            return own
+        }
+        return try? current()
+    }
+
     public func current() throws -> Runner {
         let link = paths.currentRunner.path(percentEncoded: false)
         guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: link) else {

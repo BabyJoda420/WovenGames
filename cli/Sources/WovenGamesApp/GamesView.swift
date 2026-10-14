@@ -18,7 +18,7 @@ struct GamesView: View {
                 if model.games.isEmpty {
                     ContentUnavailableView("No Windows games installed",
                                            systemImage: "gamecontroller",
-                                           description: Text("Install a Windows game in Steam; it runs through WovenGames automatically."))
+                                           description: Text("Install a Windows game in Steam; it runs through WovenGames automatically. Games from elsewhere can be added with +."))
                 }
             }
 
@@ -32,6 +32,10 @@ struct GamesView: View {
             .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
         }
         .navigationTitle("Games")
+        .toolbar {
+            Button { model.addNonSteamGame() } label: { Label("Add Windows Game…", systemImage: "plus") }
+                .help("Add a Windows game from outside Steam (GOG, itch.io, …)")
+        }
         .onAppear {
             if selection == nil { selection = model.games.first?.id }
             showRequestedGame()
@@ -135,6 +139,16 @@ struct GameDetailView: View {
     @State private var lastRun: LastRun?
     @State private var saveError: String?
     @State private var confirmReset = false
+    /// installed runner ids, for the Engine picker
+    @State private var runnerIDs: [String] = []
+    @State private var snapshots: [PrefixSnapshot] = []
+    @State private var pendingRestore: PrefixSnapshot?
+    @State private var confirmRemove = false
+
+    static func snapshotLabel(_ s: PrefixSnapshot) -> String {
+        let when = s.date.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? s.id
+        return s.automatic ? "\(when) (before an engine update)" : when
+    }
 
     var body: some View {
         // reads model.launchFindings, which diagnose() refreshes after each run (generation bump)
@@ -184,6 +198,16 @@ struct GameDetailView: View {
                 Section("Advanced") {
                     TextField("Game arguments", text: $settings.gameArgs, prompt: Text(recommended?.gameArgs.isEmpty == false ? recommended!.gameArgs : "e.g. -dx11"))
                     Toggle("msync (faster thread synchronisation)", isOn: $settings.msync)
+                    // only worth showing when there is a choice (or a choice to undo)
+                    if runnerIDs.count > 1 || !settings.runner.isEmpty {
+                        Picker("Engine", selection: $settings.runner) {
+                            Text("Default (\(model.runner?.id ?? "none"))").tag("")
+                            ForEach(runnerIDs, id: \.self) { Text($0).tag($0) }
+                            if !settings.runner.isEmpty && !runnerIDs.contains(settings.runner) {
+                                Text("\(settings.runner) (not installed)").tag(settings.runner)
+                            }
+                        }
+                    }
                     if let saveError {
                         Label(saveError, systemImage: "xmark.octagon.fill").foregroundStyle(.red)
                     }
@@ -197,8 +221,21 @@ struct GameDetailView: View {
                         Button("Show Prefix") { model.reveal(game.prefix) }
                             .disabled(!FileManager.default.fileExists(atPath: game.prefix.path(percentEncoded: false)))
                         Spacer()
+                        Menu("Snapshots") {
+                            Button("Take Snapshot Now") { Task { await model.snapshotPrefix(of: game) } }
+                            if !snapshots.isEmpty {
+                                Section("Restore") {
+                                    ForEach(snapshots) { s in Button(Self.snapshotLabel(s)) { pendingRestore = s } }
+                                }
+                            }
+                        }
+                        .fixedSize()
+                        .disabled(model.busy != nil || !FileManager.default.fileExists(atPath: game.prefix.path(percentEncoded: false)))
                         Button("Reset Prefix…", role: .destructive) { confirmReset = true }
                             .disabled(!FileManager.default.fileExists(atPath: game.prefix.path(percentEncoded: false)))
+                        if NonSteamGames.isNonSteam(appID: game.appID) {
+                            Button("Remove from Library…", role: .destructive) { confirmRemove = true }
+                        }
                     }
                 } footer: {
                     Text("Settings apply at the next launch from Steam. Your settings win over WovenGames' recommendations, and launch options set in Steam win over both.")
@@ -212,12 +249,28 @@ struct GameDetailView: View {
             saved = loaded
             settings = loaded
             recommended = GameSettings.recommended(appID: game.appID)
+            runnerIDs = RunnerStore(paths: model.paths).list().map(\.id)
             let dir = game.installDir
             detected = await Task.detached { BackendDetector.detect(launchTarget: nil, installDir: dir) }.value
         }
         .task(id: model.generation) {
             let game = game
             lastRun = await Task.detached { SteamLibrary.lastRun(of: game) }.value
+            snapshots = PrefixSnapshots(compatData: game.compatData).list()
+        }
+        .confirmationDialog("Restore \(game.name)'s prefix from this snapshot?", isPresented: Binding(
+            get: { pendingRestore != nil }, set: { if !$0 { pendingRestore = nil } })) {
+            Button("Restore", role: .destructive) {
+                if let s = pendingRestore { Task { await model.restoreSnapshot(s.id, of: game) } }
+            }
+        } message: {
+            Text("The current prefix goes to the Trash. Saves synced to Steam Cloud are not affected.")
+        }
+        .confirmationDialog("Remove \(game.name) from the library?", isPresented: $confirmRemove) {
+            Button("Remove, Keep Prefix") { Task { await model.removeNonSteamGame(game, deleteData: false) } }
+            Button("Remove and Delete Prefix", role: .destructive) { Task { await model.removeNonSteamGame(game, deleteData: true) } }
+        } message: {
+            Text("The game's own files stay where they are. Its prefix holds its Windows settings and any saves kept there.")
         }
         .onChange(of: settings) { _, new in
             guard let saved, new != saved else { return }
@@ -299,6 +352,7 @@ private struct ProblemCard: View {
     let game: InstalledGame
     @Binding var settings: GameSettings
     @Binding var confirmReset: Bool
+    @State private var movedToSettings = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -346,27 +400,59 @@ private struct ProblemCard: View {
                 .disabled(model.busy != nil)
         case .launchOptions(let options):
             VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .top) {
-                    Text(options)
-                        .font(.body.monospaced())
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
-                    Button("Copy") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(options, forType: .string)
+                if movedToSettings {
+                    Text("Settings moved to WovenGames. Update Steam launch options to:")
+                        .font(.caption).foregroundStyle(.secondary)
+                    let textToCopy = finding.cleanedOptions ?? "%command%"
+                    HStack(alignment: .top) {
+                        Text(textToCopy)
+                            .font(.body.monospaced())
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
+                        Button("Copy") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(textToCopy, forType: .string)
+                        }
+                    }
+                    Text("Paste into the game's Properties → General → Launch Options in Steam.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    HStack(alignment: .top) {
+                        Text(options)
+                            .font(.body.monospaced())
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
+                        Button("Copy") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(options, forType: .string)
+                        }
+                    }
+                    Text("Paste into the game's Properties → General → Launch Options in Steam.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if !finding.misplacedSettings.isEmpty {
+                        Button("Move to WovenGames Settings") {
+                            settings.apply(tokens: finding.misplacedSettings)
+                            movedToSettings = true
+                        }
                     }
                 }
-                Text("Paste into the game's Properties → General → Launch Options in Steam.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
         case .switchBackend(let backend):
             Button("Use \(backend.label.components(separatedBy: " (").first ?? backend.rawValue)") {
                 settings.backend = backend
             }
             .disabled(settings.backend == backend)
+        case .useSettings(let backend, let gameArgs):
+            Button("Use \(backend.label.components(separatedBy: " (").first ?? backend.rawValue) with \(gameArgs)") {
+                settings.apply(backend: backend, gameArgs: gameArgs)
+            }
+            .disabled(settings.backend == backend && settings.gameArgs.split(whereSeparator: \.isWhitespace).contains(Substring(gameArgs)))
         case .openLaunchLog:
             Button("Open Launch Log") { model.open(game.runLog) }
         }
@@ -401,6 +487,8 @@ private struct SteamArtImage<Placeholder: View>: View {
             }
         }
         .task(id: key) {
+            // Steam has no art for a game added outside it
+            guard !NonSteamGames.isNonSteam(appID: appID) else { loaded = true; return }
             if let cached = ArtCache.shared.lookup(key) {
                 image = cached.image
                 loaded = true

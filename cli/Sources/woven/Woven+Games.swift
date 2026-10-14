@@ -89,14 +89,14 @@ extension Woven {
             commandName: "games",
             abstract: "Installed Windows games in Steam.",
             discussion: "With no subcommand, lists the games.",
-            subcommands: [List.self, Diagnose.self, Quit.self]
+            subcommands: [List.self, Add.self, Play.self, Remove.self, Diagnose.self, Quit.self]
         )
 
         // runs `list` itself: a defaultSubcommand would also take over `woven games --help`
         func run() async throws { try List().run() }
 
         static func game(_ appID: String) throws -> InstalledGame {
-            let games = SteamLibrary().windowsGames()
+            let games = SteamLibrary().windowsGames() + NonSteamGames().installedGames()
             guard let game = games.first(where: { $0.appID == appID }) else {
                 throw fail(Message("no installed Windows game with app id \(appID); `woven games` lists them (the id is also in the game's Steam store URL)"))
             }
@@ -106,12 +106,13 @@ extension Woven {
         struct List: ParsableCommand {
             static let configuration = CommandConfiguration(abstract: "List installed Windows games and their last run.")
             func run() {
-                let games = SteamLibrary().windowsGames()
+                let games = SteamLibrary().windowsGames() + NonSteamGames().installedGames()
                 if games.isEmpty { print("no Windows games installed in Steam"); return }
                 let running = Set(GameSessions().running())
                 let idWidth = games.map(\.appID.count).max() ?? 0
                 for game in games {
                     var parts = [game.appID.padding(toLength: idWidth, withPad: " ", startingAt: 0), game.name]
+                    if NonSteamGames.isNonSteam(appID: game.appID) { parts.append("(not on Steam)") }
                     if running.contains(game.appID) { parts.append("running") }
                     if let run = SteamLibrary.lastRun(of: game) {
                         var last = "last run: \(run.backend ?? "?")"
@@ -132,12 +133,15 @@ extension Woven {
 
             func run() throws {
                 let game = try GamesCommand.game(appID)
+                let settings = GameSettings.load(appID: appID)
+                let isUE = LaunchDiagnosis.isUnrealEngine(installDir: game.installDir)
                 let findings = LaunchDiagnosis.findings(
                     run: SteamLibrary.lastRun(of: game),
                     launchOptions: SteamLaunchOptions.read(appID: appID),
-                    runner: try? RunnerStore().current(),
-                    settings: GameSettings.load(appID: appID),
-                    detected: BackendDetector.detect(launchTarget: nil, installDir: game.installDir).backend
+                    runner: RunnerStore().runner(for: settings),
+                    settings: settings,
+                    detected: BackendDetector.detect(launchTarget: nil, installDir: game.installDir).backend,
+                    isUnreal: isUE
                 )
                 if findings.isEmpty { print("no problems found"); return }
                 for (i, finding) in findings.enumerated() {
@@ -159,6 +163,7 @@ extension Woven {
                 case .installEngine: "reinstall the engine: woven install --latest"
                 case .launchOptions(let options): "set the launch options in Steam to:\n   \(options)"
                 case .switchBackend(let choice): "switch the graphics backend to \(choice.label) in the WovenGames app"
+                case .useSettings(let choice, let args): "switch backend to \(choice.label) and set game args '\(args)' in the WovenGames app"
                 case .openLaunchLog: "read the launch log: \(game.runLog.path(percentEncoded: false))"
                 }
             }

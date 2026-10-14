@@ -61,6 +61,9 @@ cd cli && swift build -c release      # needs Xcode (or Command Line Tools with 
 .build/release/woven runner install    # install the newest engine build
 .build/release/woven backend detect /path/to/Game.exe
 .build/release/woven run /path/to/Game.exe
+.build/release/woven games add /path/to/Game.exe   # a game from outside Steam (GOG, itch.io, ...)
+.build/release/woven snapshot take <appid>         # instant snapshot of a game's prefix
+.build/release/woven uninstall                     # restore Steam and remove WovenGames (keeps prefixes)
 ```
 
 ## License
@@ -74,5 +77,6 @@ cli/scripts/build-app.sh --open      # builds cli/.build/WovenGames.app and open
 ```
 
 - **Status** lists the checks, installs the engine, patches or restores Steam, and pins Steam's build.
-- **Games** lists installed Windows games. Each game has its own graphics backend, Metal HUD, Retina and msync
-  settings (stored in `~/Library/Application Support/WovenGames/games/<appid>.env`), plus its launch log and prefix tools.
+- **Games** lists installed Windows games, plus games added from outside Steam with **+**. Each game has its own graphics backend, Metal HUD, Retina and msync
+  settings (stored in `~/Library/Application Support/WovenGames/games/<appid>.env`), an engine choice when several are
+  installed, plus its launch log and prefix tools (snapshots, reset).

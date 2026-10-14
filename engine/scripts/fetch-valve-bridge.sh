@@ -6,6 +6,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# NotProton's app isn't built here, but its manifest is kept where upstream keeps it, so
+# upstream updates to the Valve package list merge cleanly: don't delete notproton/app.
 MANIFEST="$ROOT/notproton/app/Sources/NotProtonApp/Resources/valve-packages.manifest"
 CACHE="$ROOT/downloads/valve"
 OUT="$ROOT/build/bridge"
