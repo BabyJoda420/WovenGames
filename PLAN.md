@@ -60,7 +60,7 @@ directly, nothing needs a fake CrossOver anymore.
 ## 3. `woven` CLI
 
 ```
-woven doctor                              # Mac, Rosetta, disk space, engine and backends, Steam build, hook and pin
+woven doctor                              # Mac, Rosetta, disk space, engine and backends, Steam build, hook, pin, App Management
 woven install [--latest]                  # engine + D3DMetal + Valve's Steam DLLs from a release, each hash-checked
 woven setup                               # install a local engine build instead
 woven runner list|install|use
@@ -69,6 +69,9 @@ woven backend detect <game.exe>           # reads the game's PE imports and prin
 woven run [--backend X] <exe>             # run any Windows exe (games outside Steam, testing)
 woven steam status|builds|update|patch|unpatch|pin|unpin|log
 woven games list|diagnose|quit
+woven games add <exe> [--name N] [-- args] | play <id> | remove <id>   # Windows games from outside Steam
+woven snapshot list|take|restore|delete <appid>   # prefix snapshots (APFS clones)
+woven uninstall [--delete-prefixes] [--dry-run]
 woven compat sync                         # fetch the newest known-good settings from GitHub
 woven update                              # app/engine updates
 woven report                              # problem report zip, personal data removed
@@ -82,7 +85,7 @@ woven report                              # problem report zip, personal data re
 | M1 | **Engine**: build the runner locally (~20–30 min, ~15 GB) | ✅ done: `tests/probe-backends.sh` passes all backends on an M4 |
 | M2 | **CLI**: `woven` with doctor/runner/prefix/backend/run | ✅ done: d3dprobe runs via `woven run`, auto backend |
 | M3 | **Steam integration**: patch, pin, register the compat tool, rename notproton→wovengames | ✅ done 2026-10-10: Billie's Wheelie (Unity, app 3180310) installs and plays from macOS Steam on DXMT, Steam build 1788652215 |
-| M4 | **App**: onboarding, per-game settings, one-click uninstall that restores Steam | 🟡 done except the uninstall: setup assistant (Mac → engine → App Management → Steam), Status page, Games library (art, Play/Force Quit, launch problem cards, per-game backend/HUD/Retina/msync), menu bar companion, Settings, Report a Problem, Restore Steam. **Missing:** a full uninstall that also removes runners, prefixes (optional) and the support folder |
+| M4 | **App**: onboarding, per-game settings, one-click uninstall that restores Steam | ✅ done (uninstall in v0.3): setup assistant (Mac → engine → App Management → Steam), Status page, Games library (art, Play/Force Quit, launch problem cards, per-game backend/HUD/Retina/msync), menu bar companion, Settings, Report a Problem, Restore Steam, and `woven uninstall` / Uninstall WovenGames… |
 | M5 | **Distribution**: CI builds the runner and app and publishes Releases; Steam build tracking | ✅ done: releases 0.1.0, 0.1.1, 0.2.0-beta.1, 0.2.0 and 0.2.1 built by `release.yml`. `woven install` and the app install from releases. The daily `steam-watch` workflow checks new Steam builds offline, commits the results to `compat/steam-builds.json` and opens an issue if a build breaks the hook |
 
 **M5 decisions (2026-10-10):** release builds run on GitHub Actions' Apple Silicon runners (free for public
@@ -96,19 +99,18 @@ no notarization**, so users right-click → Open on first launch. This isn't an 
 
 | # | Item | Size | Status |
 |---|---|---|---|
-| I1 | UE5 D3D12 on D3DMetal: reproduce the `DXGIAdapter::QueryVideoMemoryInfo` spin from Double Exposure, then patch. Unblocks Expedition 33 | L | |
-| I2 | Launch problem cards: move launch options placed before `%command%` into `games/<appid>.env` with one click; after a failed launch, suggest the next backend (and `-dx11` for UE games on DXMT) | S–M | |
-| I3 | Fixtures that check the shell `detect_d3d` and Swift `BackendDetector` pick the same backend, run in CI | S | |
-| I4 | `woven doctor` checks the App Management permission | S | |
-| F1 | `woven uninstall [--keep-prefixes]` and an app menu item: restore Steam, remove the compat tool, runners, launchers and support folder (finishes M4) | M | |
-| F2 | Prefix snapshots as APFS clones (instant, no extra space), taken automatically before engine updates, with restore | M | |
-| F3 | Non-Steam Windows games (GOG, itch, ...) in the Games library: own prefix, backend detection, launcher bundle and Game Mode | M–L | |
-| F4 | Per-game runner (`WOVEN_RUNNER=<id>`), so a patched engine can be tried on one game | M | |
+| I1 | UE5 D3D12 on D3DMetal: reproduce the `DXGIAdapter::QueryVideoMemoryInfo` spin from Double Exposure, then patch. Unblocks Expedition 33 | L | 🟡 lead: D3DMetal reports a 24 GB budget on a 16 GB Mac (`d3dprobe`); needs a UE5 DX12 game to confirm |
+| I2 | Launch problem cards: move launch options placed before `%command%` into `games/<appid>.env` with one click; after a failed launch, suggest the next backend (and `-dx11` for UE games on DXMT) | S–M | ✅ |
+| I3 | Fixtures that check the shell `detect_d3d` and Swift `BackendDetector` pick the same backend, run in CI | S | ✅ 25 cases |
+| I4 | `woven doctor` checks the App Management permission | S | ✅ |
+| F1 | `woven uninstall [--delete-prefixes]` and an app menu item: restore Steam, remove the compat tool, runners, launchers and support folder; game prefixes are kept by default (finishes M4) | M | ✅ |
+| F2 | Prefix snapshots as APFS clones (instant, no extra space), taken automatically before engine updates, with restore | M | ✅ `woven snapshot`, game page menu |
+| F3 | Non-Steam Windows games (GOG, itch, ...) in the Games library: own prefix, backend detection, launcher bundle and Game Mode | M–L | ✅ `woven games add/play/remove`, + on the Games page |
+| F4 | Per-game runner (`WOVEN_RUNNER=<id>`), so a patched engine can be tried on one game | M | ✅ |
 
 Build order: I3, I4, F1 → F4 (needed to test I1 safely) → I1 → I2 → F2 → F3.
 Later: per-game Windows version and virtual desktop, MetalFX upscaling, sharing working settings from the app,
 prefix templates and persistent shader caches (once measured).
-Also: comments at the two engine-script references to `valve-packages.manifest` explaining why `notproton/app` stays.
 
 ### Tested games
 
