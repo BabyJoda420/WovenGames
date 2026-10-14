@@ -91,6 +91,12 @@ jobs:
         run: |
           : > release/NOTES.md
           prerelease=()
+          # this version's section of CHANGELOG.md (heading "## <version> ..." up to the next "## ")
+          awk -v v="$VERSION" '$1 == "##" && $2 == v { on = 1; next } on && /^## / { exit } on' CHANGELOG.md > release/CHANGES.md
+          if ! grep -q '[^[:space:]]' release/CHANGES.md; then
+            echo "CHANGELOG.md has no section for $VERSION: every release needs its notes" >&2
+            exit 1
+          fi
           if [[ "$VERSION" == *-* ]]; then
             prerelease=(--prerelease)
             cat >> release/NOTES.md <<EOF
@@ -98,11 +104,12 @@ jobs:
 
           EOF
           fi
+          { echo "## What's new"; cat release/CHANGES.md; echo; } >> release/NOTES.md
           cat >> release/NOTES.md <<EOF
           ## Install
 
           1. Download **WovenGames-$VERSION.zip**, unzip it, and move **WovenGames.app** to Applications.
-          2. The first time, right-click it and choose **Open**: the app is not notarized yet.
+          2. The first time, right-click it and choose **Open** (WovenGames is free and not notarized by Apple).
           3. Click **Install** to download the engine. D3DMetal (Apple) and Valve's Steam DLLs are then
              fetched on your Mac and checked against pinned hashes.
           4. Click **Patch Steam** (macOS asks to allow App Management), then install and play Windows
