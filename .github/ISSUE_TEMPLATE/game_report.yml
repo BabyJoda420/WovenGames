@@ -1,0 +1,77 @@
+name: Game report
+description: Share whether a Windows game works and what settings helped
+title: "[Game]: "
+labels: ["game report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping test games with WovenGames!
+  - type: input
+    id: game-name
+    attributes:
+      label: Game name
+      placeholder: "e.g. Hades II"
+    validations:
+      required: true
+  - type: input
+    id: app-id
+    attributes:
+      label: Steam app ID
+      description: "The number in the game's Steam store page URL, or on the game's page in WovenGames. Leave blank if not on Steam."
+      placeholder: "e.g. 1145350"
+    validations:
+      required: false
+  - type: dropdown
+    id: result
+    attributes:
+      label: Does this game work?
+      options:
+        - "works well"
+        - "works with settings"
+        - "starts but has problems"
+        - "does not start"
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Graphics backend used
+      description: Which backend was selected in the game's settings?
+      options:
+        - "Automatic"
+        - "D3DMetal"
+        - "DXMT"
+        - "WineD3D"
+    validations:
+      required: true
+  - type: textarea
+    id: settings-helped
+    attributes:
+      label: Settings that helped
+      description: |
+        What settings made the game run better? (e.g. backend choice, in-game graphics settings, launch arguments like -dx11, Metal HUD, Retina, msync).
+      placeholder: "e.g. Selected DXMT backend with -dx11 in game arguments. In-game graphics set to Medium, runs at a solid 60 fps."
+    validations:
+      required: false
+  - type: input
+    id: mac
+    attributes:
+      label: Mac model and chip
+      placeholder: 'e.g. MacBook Air 15" (2023), M2, 16 GB RAM'
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: macOS version
+      placeholder: "e.g. macOS 15.0"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: WovenGames version
+      placeholder: "e.g. 0.3.0-beta.1"
+    validations:
+      required: true

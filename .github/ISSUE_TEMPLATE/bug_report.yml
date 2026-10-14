@@ -1,0 +1,71 @@
+name: Bug report
+description: Report a problem or unexpected behavior in WovenGames
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem! Before opening an issue, check the [Problems section of the README](https://github.com/BabyJoda420/WovenGames#problems) to see if it's already covered.
+  - type: input
+    id: version
+    attributes:
+      label: WovenGames version
+      description: "The version you are running (from the app menu WovenGames → About WovenGames, or `woven --version`)."
+      placeholder: "e.g. 0.3.0-beta.1"
+    validations:
+      required: true
+  - type: input
+    id: mac
+    attributes:
+      label: Mac model and chip
+      description: "Find this in Apple menu  → About This Mac."
+      placeholder: 'e.g. MacBook Pro 14" (2024), M4 Pro, 24 GB RAM'
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: macOS version
+      placeholder: "e.g. macOS 15.1 Sequoia"
+    validations:
+      required: true
+  - type: input
+    id: game
+    attributes:
+      label: Game (if this happened with a game)
+      description: "Game name and Steam app ID if on Steam (found in the store URL or game page)."
+      placeholder: "e.g. Billie's Wheelie (3180310)"
+    validations:
+      required: false
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe what went wrong. Include any error messages you saw.
+    validations:
+      required: true
+  - type: textarea
+    id: what-expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: checkboxes
+    id: diagnostic-report
+    attributes:
+      label: Problem report diagnostic zip
+      description: |
+        In WovenGames, choose **Help → Report a Problem…** (or run `woven report` in Terminal).
+        This creates a zip file on your Desktop with the relevant logs and system details.
+        Your Steam account name and personal details are automatically removed.
+      options:
+        - label: "I attached the zip from Help → Report a Problem… (drag it into the box below; skip this if the app won't open)"
+          required: false
+  - type: textarea
+    id: attachment
+    attributes:
+      label: Attach diagnostic zip or logs
+      description: Drag and drop the zip file from your Desktop here (or paste relevant log lines).
+    validations:
+      required: false
