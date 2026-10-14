@@ -777,20 +777,25 @@ done
 ln "$WINELOADER" "$loader_macos/wine" 2>/dev/null || cp "$WINELOADER" "$loader_macos/wine"
 # WovenGames: Wine execs every new Windows process through a link in $TMPDIR (named after
 # the exe), outside this bundle, so gamepolicyd ignored the game. The engine's ntdll
-# (patches/local/0003) execs the exe named in WOVEN_BUNDLE_EXE from WOVEN_BUNDLE_LOADER
-# instead; helper processes keep the temp link and stay out of Game Mode's view.
+# (patches/local/0003) execs from WOVEN_BUNDLE_LOADER instead the exe named in
+# WOVEN_BUNDLE_EXE and every other exe in WOVEN_BUNDLE_DIR (the install folder, so a game
+# started through a launcher exe gets Game Mode too) except known helpers (crash handlers,
+# installers); Wine's own helper processes keep the temp link and stay out of Game Mode's view.
 WOVEN_BUNDLE_LOADER=""
 WOVEN_BUNDLE_EXE=""
+WOVEN_BUNDLE_DIR=""
 if [ -x "$loader_macos/wine" ]; then
   WINELOADER="$loader_macos/wine"
   echo "loader staged in bundle for game mode" >> "$log" 2>&1 || true
   WOVEN_BUNDLE_LOADER="$loader_macos/wine"
   WOVEN_BUNDLE_EXE="${target##*/}"
   echo "game mode: $WOVEN_BUNDLE_EXE runs from the launcher bundle" >> "$log" 2>&1 || true
+  WOVEN_BUNDLE_DIR="$STEAM_COMPAT_INSTALL_PATH"
+  echo "game mode: exes in $WOVEN_BUNDLE_DIR run from the launcher bundle" >> "$log" 2>&1 || true
 else
   echo "loader staging failed, game mode unavailable" >> "$log" 2>&1 || true
 fi
-export WOVEN_BUNDLE_LOADER WOVEN_BUNDLE_EXE
+export WOVEN_BUNDLE_LOADER WOVEN_BUNDLE_EXE WOVEN_BUNDLE_DIR
 
 cat > "$loader_macos/launcher" <<LAUNCHER
 #!/bin/sh
@@ -920,6 +925,7 @@ set -- \
   --env STEAM_DYLD_INSERT_LIBRARIES="$STEAM_DYLD_INSERT_LIBRARIES" \
   --env WOVEN_BUNDLE_LOADER="$WOVEN_BUNDLE_LOADER" \
   --env WOVEN_BUNDLE_EXE="$WOVEN_BUNDLE_EXE" \
+  --env WOVEN_BUNDLE_DIR="$WOVEN_BUNDLE_DIR" \
   --env WOVEN_GAME_CWD="$game_cwd" "$@"
 lsregister="/System/Library/Frameworks/CoreServices.framework/Versions/A"
 lsregister="$lsregister/Frameworks/LaunchServices.framework/Support/lsregister"

@@ -1,4 +1,4 @@
-From 574ab2d0994b7e086c1f01464f61a5f9488ef250 Mon Sep 17 00:00:00 2001
+From 9c367c995ba115c3be5d74f755d11046f81c32c1 Mon Sep 17 00:00:00 2001
 From: BabyJoda420 <95344391+BabyJoda420@users.noreply.github.com>
 Date: Tue, 13 Oct 2026 23:30:00 +0200
 Subject: [PATCH] ntdll: exec the game's exe from the WovenGames launcher
@@ -11,20 +11,40 @@ $TMPDIR/winetemp-*, so gamepolicyd saw the game as an anonymous process
 and ignored it.
 
 When WOVEN_BUNDLE_LOADER names an executable loader (the link the Steam
-run script stages in the launcher bundle's Contents/MacOS) and the exe
-being started has the basename in WOVEN_BUNDLE_EXE (case-insensitive),
-exec that loader instead of creating the temp link.
+run script stages in the launcher bundle's Contents/MacOS), exec that
+loader instead of creating the temp link for an exe that either
+- has the basename in WOVEN_BUNDLE_EXE (case-insensitive): the exe Steam
+  starts, or
+- lies inside WOVEN_BUNDLE_DIR (the game's install folder, a unix path)
+  and whose basename matches no known helper pattern (crash handlers,
+  redistributable/prerequisite/anti-cheat installers, uninstallers,
+  *setup*.exe, *install*.exe), so a game started through a launcher exe
+  (a UE stub, a publisher launcher) gets Game Mode too.
+
+The image path the loader receives is the new process's ImagePathName,
+a full DOS path (C:\...\game.exe, or \\?\unix\... when no drive maps
+the file); it is resolved to a unix path through the prefix's
+dosdevices links and realpath(), then prefix-matched case-insensitively
+on a directory boundary against realpath(WOVEN_BUNDLE_DIR).
 WINEPRELOADERAPPNAME is still set as before. Every other process,
 including Wine's helpers and crash handlers, keeps the temp link.
 ---
- dlls/ntdll/unix/loader.c | 30 +++++++++++++++++++++++++++++-
- 1 file changed, 29 insertions(+), 1 deletion(-)
+ dlls/ntdll/unix/loader.c | 94 +++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 93 insertions(+), 1 deletion(-)
 
 diff --git a/dlls/ntdll/unix/loader.c b/dlls/ntdll/unix/loader.c
-index 0ea6e1b..afb86ff 100644
+index 0ea6e1b..6fe3199 100644
 --- a/dlls/ntdll/unix/loader.c
 +++ b/dlls/ntdll/unix/loader.c
-@@ -654,12 +654,40 @@ fail:
+@@ -39,6 +39,7 @@
+ #include <sys/wait.h>
+ #include <unistd.h>
+ #include <dlfcn.h>
++#include <fnmatch.h>  /* WovenGames: woven_bundle_loader() */
+ #ifdef HAVE_PWD_H
+ # include <pwd.h>
+ #endif
+@@ -654,12 +655,103 @@ fail:
      return NULL;
  }
  
@@ -33,24 +53,87 @@ index 0ea6e1b..afb86ff 100644
 + * LSApplicationCategoryType public.app-category.games. The link made above lives in
 + * $TMPDIR, outside any bundle, so the game ran as an anonymous process and Game Mode never
 + * turned on. The Steam run script stages a per-game launcher bundle with a link to this
-+ * loader in Contents/MacOS, names it in WOVEN_BUNDLE_LOADER, and names the game's own exe
-+ * in WOVEN_BUNDLE_EXE. Only that exe is exec'd from the bundle; helper processes
-+ * (services.exe, winedevice.exe, crash handlers...) keep the temp link, so they are not
-+ * counted as extra instances of the game. Returns NULL when the bundle does not apply. */
++ * loader in Contents/MacOS and names it in WOVEN_BUNDLE_LOADER. An exe is exec'd from the
++ * bundle when its basename is WOVEN_BUNDLE_EXE (the exe Steam starts), or when it lies in
++ * WOVEN_BUNDLE_DIR (the game's install folder, a unix path) and is not a known helper, so
++ * a game started through a launcher exe gets Game Mode too. Everything else (services.exe,
++ * winedevice.exe, crash handlers, redistributable installers...) keeps the temp link, so it
++ * is not counted as an extra instance of the game. */
++
++/* Helpers that ship inside game folders; matched case-insensitively against the basename. */
++static const char * const woven_helper_patterns[] =
++{
++    "*crash*", "vc_redist*", "vcredist*", "dxsetup.exe", "dotnet*", "ue4prereqsetup*",
++    "ueprereqsetup*", "easyanticheat_setup.exe", "eac*setup*", "be*service*", "battleye*",
++    "unins*.exe", "*setup*.exe", "*install*.exe",
++};
++
++/* image_path is the new process's ImagePathName as kernelbase built it: a full DOS path
++ * ("C:\dir\game.exe"), or "\\?\unix\dir\game.exe" for a unix path no drive maps. Resolve it
++ * to a canonical unix path through the prefix's dosdevices links; NULL if that fails. */
++static char *woven_unix_image_path(const char *image_path)
++{
++    char *dos, *path = NULL, *ret, *p;
++    BOOL prefixed = FALSE;
++
++    if (!strncmp(image_path, "\\??\\", 4) || !strncmp(image_path, "\\\\?\\", 4))
++    {
++        image_path += 4;
++        prefixed = TRUE;
++    }
++    if (!(dos = strdup(image_path))) return NULL;
++    for (p = dos; *p; p++) if (*p == '\\') *p = '/';
++    if (prefixed && !strncasecmp(dos, "unix/", 5))
++        path = strdup(dos + 4);
++    else if ((dos[0] | 0x20) >= 'a' && (dos[0] | 0x20) <= 'z' && dos[1] == ':' && dos[2] == '/' && config_dir)
++    {
++        if (asprintf(&path, "%s/dosdevices/%c:%s", config_dir, dos[0] | 0x20, dos + 2) < 0) path = NULL;
++    }
++    free(dos);
++    if (!path) return NULL;
++    ret = realpath(path, NULL);
++    free(path);
++    return ret;
++}
++
++static BOOL woven_in_bundle_dir(const char *image_path, const char *name)
++{
++    const char *dir_env = getenv("WOVEN_BUNDLE_DIR");
++    char *dir, *exe_path = NULL;
++    size_t i, len;
++    BOOL ret = FALSE;
++
++    if (!dir_env || !*dir_env) return FALSE;
++    for (i = 0; i < ARRAY_SIZE(woven_helper_patterns); i++)
++        if (!fnmatch(woven_helper_patterns[i], name, FNM_CASEFOLD)) return FALSE;
++    if (!(dir = realpath(dir_env, NULL))) return FALSE;
++    if ((exe_path = woven_unix_image_path(image_path)))
++    {
++        /* case-insensitive (APFS default) prefix match on a directory boundary */
++        len = strlen(dir);
++        ret = !strncasecmp(exe_path, dir, len) && exe_path[len] == '/';
++    }
++    free(exe_path);
++    free(dir);
++    return ret;
++}
++
++/* Returns the bundle loader to exec, or NULL when the bundle does not apply. */
 +static char *woven_bundle_loader(const char *wineloader_path, const char *image_path)
 +{
 +    const char *loader = getenv("WOVEN_BUNDLE_LOADER");
 +    const char *exe = getenv("WOVEN_BUNDLE_EXE");
 +    const char *name, *p;
 +
-+    if (!loader || !*loader || !exe || !*exe || !image_path) return NULL;
++    if (!loader || !*loader || !image_path) return NULL;
 +    /* Only stand in for the default loader, never for an alternate (32-bit) one. */
 +    if (!wineloader || strcmp(wineloader_path, wineloader)) return NULL;
 +
 +    name = image_path;
 +    if ((p = strrchr(name, '\\'))) name = p + 1;
 +    if ((p = strrchr(name, '/'))) name = p + 1;
-+    if (strcasecmp(name, exe)) return NULL;
++    if (!(exe && *exe && !strcasecmp(name, exe)) && !woven_in_bundle_dir(image_path, name))
++        return NULL;
 +    if (access(loader, X_OK)) return NULL;
 +    return strdup(loader);
 +}
