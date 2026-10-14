@@ -4,9 +4,18 @@ import WovenCore
 struct StatusView: View {
     @Environment(AppModel.self) private var model
     @State private var confirmRestore = false
+    @State private var confirmSteamUpdate = false
+    @State private var engineVersion: String?
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         Form {
+            if let update = model.availableUpdate {
+                Section {
+                    updateBanner(update)
+                }
+            }
+
             Section {
                 headline
             }
@@ -65,6 +74,10 @@ struct StatusView: View {
                     if let pending = builds.pending { buildRow("Downloaded update", pending, builds) }
                     if builds.latestPublic != builds.installed { buildRow("Newest from Valve", builds.latestPublic, builds) }
                     if let beta = builds.latestBeta { buildRow("Newest beta", beta, builds) }
+                    if model.canUpdateSteam, let newest = builds.latestPublic {
+                        Button("Update Steam to \(newest)") { confirmSteamUpdate = true }
+                            .buttonStyle(.bordered)
+                    }
                 } header: {
                     Text("Steam builds")
                 } footer: {
@@ -77,10 +90,47 @@ struct StatusView: View {
                     CheckRow(check: check)
                 }
             }
+
+            Section("About") {
+                LabeledContent("WovenGames", value: model.appVersion)
+                LabeledContent("Engine", value: engineVersion ?? "unknown")
+                LabeledContent("Updates") {
+                    HStack {
+                        Text(model.lastUpdateCheck.map { "Checked \($0.formatted(.relative(presentation: .named)))" } ?? "Not checked yet")
+                            .foregroundStyle(.secondary)
+                        if model.checkingForUpdates { ProgressView().controlSize(.small) }
+                        Button("Check Now") { Task { await model.checkForUpdates(manual: true) } }
+                            .disabled(model.checkingForUpdates)
+                    }
+                }
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Game recommendations")
+                        Text("Known-good settings for games, fetched from GitHub")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Refresh") { Task { await model.syncRecommendations() } }
+                }
+            }
         }
         .formStyle(.grouped)
         .disabled(model.busy != nil)
         .navigationTitle("Status")
+        .task(id: "\(model.runner?.id ?? "")|\(model.busy ?? "")") {
+            // re-read when the engine changes or an action (install, update) ends
+            let file = model.paths.engineVersionFile
+            engineVersion = await Task.detached {
+                (try? String(contentsOf: file, encoding: .utf8))?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .nilIfEmpty
+            }.value
+        }
+        .confirmationDialog("Update Steam?", isPresented: $confirmSteamUpdate) {
+            Button("Update Steam") { Task { await model.updateSteam() } }
+        } message: {
+            Text("Steam quits, installs build \(model.builds?.latestPublic ?? ""), and starts again. WovenGames checks that the hook works on it, then keeps Steam on that build. This takes a few minutes; don't start a game meanwhile.")
+        }
         .confirmationDialog("Restore Steam?", isPresented: $confirmRestore) {
             Button("Restore Steam", role: .destructive) { Task { await model.restoreSteam() } }
         } message: {
@@ -107,7 +157,9 @@ struct StatusView: View {
         }
         if let newest = r.latestPublic, newest != r.installed {
             return r.verdict(for: newest).isSafe
-                ? "Steam \(newest) is checked. To update: turn off \"Keep Steam on this build\", restart Steam, then turn it back on."
+                ? (model.canUpdateSteam
+                    ? "Steam \(newest) is checked. Update Steam installs it and keeps WovenGames working."
+                    : "Steam \(newest) is checked. To update: turn off \"Keep Steam on this build\", restart Steam, then turn it back on.")
                 : "Keep Steam on this build: WovenGames has not checked Steam \(newest) yet."
         }
         return "You are on Valve's newest Steam build."
@@ -122,6 +174,27 @@ struct StatusView: View {
         case .notProton: return "NotProton is installed; patching takes it over · \(build)"
         case .other(let lib): return "Another tool is injected (\(lib)) · \(build)"
         case .none: return "Not patched · \(build)"
+        }
+    }
+
+    private func updateBanner(_ update: GitHubRelease) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.title2)
+                .foregroundStyle(.tint)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("WovenGames \(update.version?.description ?? update.tag_name) is available\(update.prerelease ? " · Beta" : "")")
+                    .font(.headline)
+                Text("Installs the new engine, then replaces this app and reopens it.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("What's New") {
+                if let url = URL(string: update.html_url) { openURL(url) }
+            }
+            Button("Update") { Task { await model.installUpdate() } }
+                .buttonStyle(.borderedProminent)
+                .disabled(model.busy != nil)
         }
     }
 
@@ -191,4 +264,8 @@ struct CheckRow: View {
         case .fail: .red
         }
     }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

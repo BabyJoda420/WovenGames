@@ -21,8 +21,8 @@ esac
 # steamclient.dylib, steamui.dylib and the libraries they load
 PACKAGES="bins_osx bins_client_osx bins_codecs_osx bins_misc_osx bins_hardware_osx sdl3_osx breakpad_osx"
 
-WORK="${WOVEN_BUILD_ROOT:-$HOME/Library/Caches/WovenGames/engine}/steam-check/$CHANNEL"
-DL="${WOVEN_BUILD_ROOT:-$HOME/Library/Caches/WovenGames/engine}/downloads/steam-client"
+WORK="${WOVEN_BUILD_ROOT:-$HOME/Library/Developer/WovenGames/engine}/steam-check/$CHANNEL"
+DL="${WOVEN_BUILD_ROOT:-$HOME/Library/Developer/WovenGames/engine}/downloads/steam-client"
 mkdir -p "$WORK" "$DL"
 curl -fsS --max-time 60 -o "$WORK/manifest.txt" "$CDN/$MANIFEST_NAME" || { echo "could not fetch the $CHANNEL manifest" >&2; exit 2; }
 

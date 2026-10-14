@@ -1,0 +1,68 @@
+From 574ab2d0994b7e086c1f01464f61a5f9488ef250 Mon Sep 17 00:00:00 2001
+From: BabyJoda420 <95344391+BabyJoda420@users.noreply.github.com>
+Date: Tue, 13 Oct 2026 23:30:00 +0200
+Subject: [PATCH] ntdll: exec the game's exe from the WovenGames launcher
+ bundle
+
+macOS Game Mode only applies to a process whose executable lives in an
+app bundle declaring LSApplicationCategoryType public.app-category.games.
+CW HACK 22144 execs every new Windows process through a hard link in
+$TMPDIR/winetemp-*, so gamepolicyd saw the game as an anonymous process
+and ignored it.
+
+When WOVEN_BUNDLE_LOADER names an executable loader (the link the Steam
+run script stages in the launcher bundle's Contents/MacOS) and the exe
+being started has the basename in WOVEN_BUNDLE_EXE (case-insensitive),
+exec that loader instead of creating the temp link.
+WINEPRELOADERAPPNAME is still set as before. Every other process,
+including Wine's helpers and crash handlers, keeps the temp link.
+---
+ dlls/ntdll/unix/loader.c | 30 +++++++++++++++++++++++++++++-
+ 1 file changed, 29 insertions(+), 1 deletion(-)
+
+diff --git a/dlls/ntdll/unix/loader.c b/dlls/ntdll/unix/loader.c
+index 0ea6e1b..afb86ff 100644
+--- a/dlls/ntdll/unix/loader.c
++++ b/dlls/ntdll/unix/loader.c
+@@ -654,12 +654,40 @@ fail:
+     return NULL;
+ }
+ 
++/* WovenGames: macOS Game Mode. gamepolicyd only treats a process as a game when its
++ * executable lives inside an app bundle whose Info.plist declares
++ * LSApplicationCategoryType public.app-category.games. The link made above lives in
++ * $TMPDIR, outside any bundle, so the game ran as an anonymous process and Game Mode never
++ * turned on. The Steam run script stages a per-game launcher bundle with a link to this
++ * loader in Contents/MacOS, names it in WOVEN_BUNDLE_LOADER, and names the game's own exe
++ * in WOVEN_BUNDLE_EXE. Only that exe is exec'd from the bundle; helper processes
++ * (services.exe, winedevice.exe, crash handlers...) keep the temp link, so they are not
++ * counted as extra instances of the game. Returns NULL when the bundle does not apply. */
++static char *woven_bundle_loader(const char *wineloader_path, const char *image_path)
++{
++    const char *loader = getenv("WOVEN_BUNDLE_LOADER");
++    const char *exe = getenv("WOVEN_BUNDLE_EXE");
++    const char *name, *p;
++
++    if (!loader || !*loader || !exe || !*exe || !image_path) return NULL;
++    /* Only stand in for the default loader, never for an alternate (32-bit) one. */
++    if (!wineloader || strcmp(wineloader_path, wineloader)) return NULL;
++
++    name = image_path;
++    if ((p = strrchr(name, '\\'))) name = p + 1;
++    if ((p = strrchr(name, '/'))) name = p + 1;
++    if (strcasecmp(name, exe)) return NULL;
++    if (access(loader, X_OK)) return NULL;
++    return strdup(loader);
++}
++
+ static void replace_wineloader_path_with_link(char **wineloader_path, const char *image_path)
+ {
+     char *app_name = extract_exe_name(image_path);
+     if (app_name)
+     {
+-        char *preloader_path = create_preloader_link(*wineloader_path, app_name);
++        char *preloader_path = woven_bundle_loader(*wineloader_path, image_path);
++        if (!preloader_path) preloader_path = create_preloader_link(*wineloader_path, app_name);
+         if (preloader_path)
+         {
+             free(*wineloader_path);

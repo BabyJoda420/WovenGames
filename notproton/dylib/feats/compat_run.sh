@@ -85,8 +85,10 @@ else
 fi
 [ "$(stat -f %z "$log" 2>/dev/null || echo 0)" -gt 262144 ] \
   && : > "$log" || true
+start_epoch=$(date +%s)
 {
   echo "=== wovengames run $(date) ==="
+  echo "start_epoch=$start_epoch"
   echo "verb=$verb"
   echo "args:"; for a in "$@"; do echo "  [$a]"; done
   echo "cwd=$(pwd)"
@@ -648,6 +650,8 @@ bundle_name=$(printf '%s' "$game_name" | tr -d '/:"`$\\')
 game_name_xml=$(printf '%s' "$game_name" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')
 loader_root="$HOME/Library/Application Support/WovenGames/launchers/$app_id"
 mkdir -p "$loader_root"
+# WovenGames: the app's Force Quit sends this script TERM, the same as Steam's Stop
+printf '%s\n' "$$" > "$loader_root/run.pid" 2>/dev/null || true
 loader_app="$loader_root/$bundle_name.app"
 rm -rf "$loader_root"/*.app
 loader_contents="$loader_app/Contents"
@@ -766,12 +770,22 @@ for f in "$wine_unix"/*; do
   ln -sfn "$f" "$loader_macos/$base"
 done
 ln "$WINELOADER" "$loader_macos/wine" 2>/dev/null || cp "$WINELOADER" "$loader_macos/wine"
+# WovenGames: Wine execs every new Windows process through a link in $TMPDIR (named after
+# the exe), outside this bundle, so gamepolicyd ignored the game. The engine's ntdll
+# (patches/local/0003) execs the exe named in WOVEN_BUNDLE_EXE from WOVEN_BUNDLE_LOADER
+# instead; helper processes keep the temp link and stay out of Game Mode's view.
+WOVEN_BUNDLE_LOADER=""
+WOVEN_BUNDLE_EXE=""
 if [ -x "$loader_macos/wine" ]; then
   WINELOADER="$loader_macos/wine"
   echo "loader staged in bundle for game mode" >> "$log" 2>&1 || true
+  WOVEN_BUNDLE_LOADER="$loader_macos/wine"
+  WOVEN_BUNDLE_EXE="${target##*/}"
+  echo "game mode: $WOVEN_BUNDLE_EXE runs from the launcher bundle" >> "$log" 2>&1 || true
 else
   echo "loader staging failed, game mode unavailable" >> "$log" 2>&1 || true
 fi
+export WOVEN_BUNDLE_LOADER WOVEN_BUNDLE_EXE
 
 cat > "$loader_macos/launcher" <<LAUNCHER
 #!/bin/sh
@@ -894,6 +908,8 @@ set -- \
   --env STEAM_COMPAT_CLIENT_INSTALL_PATH="$STEAM_COMPAT_CLIENT_INSTALL_PATH" \
   --env STEAM_COMPAT_APP_ID="$STEAM_COMPAT_APP_ID" \
   --env STEAM_DYLD_INSERT_LIBRARIES="$STEAM_DYLD_INSERT_LIBRARIES" \
+  --env WOVEN_BUNDLE_LOADER="$WOVEN_BUNDLE_LOADER" \
+  --env WOVEN_BUNDLE_EXE="$WOVEN_BUNDLE_EXE" \
   --env WOVEN_GAME_CWD="$game_cwd" "$@"
 lsregister="/System/Library/Frameworks/CoreServices.framework/Versions/A"
 lsregister="$lsregister/Frameworks/LaunchServices.framework/Support/lsregister"
@@ -924,7 +940,8 @@ while :; do
   fi
   sleep 1
 done
-echo "=== game exited status=$status, killing wine prefix ===" >> "$log" 2>&1 || true
+echo "=== game exited status=$status after $(( $(date +%s) - start_epoch ))s, killing wine prefix ===" >> "$log" 2>&1 || true
 kill_wine_prefix
+rm -f "$loader_root/run.pid"
 echo "=== wine prefix killed, session ending ===" >> "$log" 2>&1 || true
 exit $status

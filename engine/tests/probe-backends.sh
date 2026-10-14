@@ -11,7 +11,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RUNNER="${1:-$ROOT/dist/runners/selfbuilt-cx26.3-r1}"
 WINE="$RUNNER/bin/wine"
-WORK="${WOVEN_BUILD_ROOT:-$HOME/Library/Caches/WovenGames/engine}/probe"
+WORK="${WOVEN_BUILD_ROOT:-$HOME/Library/Developer/WovenGames/engine}/probe"
 EXE="$WORK/d3dprobe.exe"
 
 [ -x "$WINE" ] || { echo "no runner at $RUNNER (run scripts/build-all.sh)" >&2; exit 1; }

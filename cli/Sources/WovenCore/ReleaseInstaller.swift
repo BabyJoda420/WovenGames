@@ -96,7 +96,8 @@ public struct ReleaseInstaller: Sendable {
             valveBridge: valve,
             hookVersion: ((try? String(contentsOf: support.appending(path: "dylib.version"), encoding: .utf8)) ?? info.version)
                 .trimmingCharacters(in: .whitespacesAndNewlines),
-            hint: "the release archive is incomplete")
+            hint: "the release archive is incomplete",
+            engineVersion: info.version)
         try Setup(paths: paths, payload: payload).run(log: log)
     }
 

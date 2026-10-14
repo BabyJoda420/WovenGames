@@ -266,7 +266,7 @@ public struct SteamPatcher: Sendable {
         log("re-signed Steam.app (ad hoc)")
     }
 
-    func quitSteam(log: (String) -> Void) throws {
+    public func quitSteam(log: (String) -> Void) throws {
         guard manageSteamProcess else { return }
         func running() -> Bool { Shell.capture("/usr/bin/pgrep", ["-x", "steam_osx"]).status == 0 }
         guard running() else { return }

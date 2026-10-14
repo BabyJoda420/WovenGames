@@ -11,13 +11,17 @@ ID="${1:-selfbuilt-cx26.3-r1}"
 
 # WovenGames: autoconf and Wine's build break on paths with spaces. In that case keep the
 # bulky work dirs in a space-free cache (outside the repo), and re-run through a space-free
-# symlink to the engine dir so every script below sees a ROOT without spaces.
-WORKROOT="${WOVEN_BUILD_ROOT:-$HOME/Library/Caches/WovenGames/engine}"
+# symlink to the engine dir so every script below sees a ROOT without spaces. Not under
+# ~/Library/Caches: macOS empties Caches when the disk runs low.
+WORKROOT="${WOVEN_BUILD_ROOT:-$HOME/Library/Developer/WovenGames/engine}"
 if [[ "$ROOT" == *" "* ]]; then
     [[ "$WORKROOT" != *" "* ]] || { echo "WOVEN_BUILD_ROOT must not contain spaces" >&2; exit 1; }
     for d in build dist downloads sources src; do
         mkdir -p "$WORKROOT/$d"
-        if [ ! -L "$ROOT/$d" ]; then
+        if [ -L "$ROOT/$d" ]; then
+            # an older layout pointed into ~/Library/Caches
+            [ "$(readlink "$ROOT/$d")" = "$WORKROOT/$d" ] || ln -sfn "$WORKROOT/$d" "$ROOT/$d"
+        else
             [ ! -e "$ROOT/$d" ] || { echo "$ROOT/$d exists; move it into $WORKROOT/$d" >&2; exit 1; }
             ln -s "$WORKROOT/$d" "$ROOT/$d"
         fi

@@ -164,7 +164,8 @@ public enum SteamBuilds {
         let log = (try? String(contentsOf: paths.hookLog, encoding: .utf8)).flatMap(HookSession.last(inLog:))
         var onInstalled = false
         if let started = log?.started, let installedAt = SteamStatus.installedManifestDate(packageDir: paths.steam.packageDir) {
-            onInstalled = started >= installedAt
+            // the log has whole seconds, the manifest's date has fractions
+            onInstalled = started >= installedAt.addingTimeInterval(-installedAt.timeIntervalSince1970.truncatingRemainder(dividingBy: 1))
         }
         return SteamBuildReport(installed: steam.clientBuild, pending: steam.pendingBuild,
                                 latestPublic: nil, latestBeta: nil, session: log, sessionOnInstalled: onInstalled,
