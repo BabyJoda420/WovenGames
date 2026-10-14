@@ -58,7 +58,11 @@ public struct SteamLibrary: Sendable {
             for (_, folder) in root.pairs {
                 guard let path = folder["path"]?.string else { continue }
                 let url = URL(filePath: path).standardizedFileURL
-                if !out.contains(where: { $0.standardizedFileURL == url }) { out.append(url) }
+                // compare paths: equal URLs can still differ in how they were built
+                let key = url.path(percentEncoded: false).trimmingSuffix("/")
+                if !out.contains(where: { $0.standardizedFileURL.path(percentEncoded: false).trimmingSuffix("/") == key }) {
+                    out.append(url)
+                }
             }
         }
         return out
