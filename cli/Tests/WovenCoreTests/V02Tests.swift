@@ -538,6 +538,39 @@ final class LaunchDiagnosisTests: XCTestCase {
         XCTAssertEqual(LaunchDiagnosis.findings(run: r, launchOptions: nil, runner: try makeRunner(d3dmetal: true), settings: GameSettings()), [])
     }
 
+    func testFindingSourcesAndNotifiable() throws {
+        let without = try makeRunner(d3dmetal: false)
+        var settings = GameSettings()
+        settings.backend = .d3dmetal
+        let options = SteamLaunchOptions("MTL_HUD_ENABLED=1 %command% CX_GRAPHICS_BACKEND=d3dmetal")
+        // setup findings only (engine, launch options): nothing to notify about when the game quits
+        let clean = run("graphics: d3dmetal from settings\n=== game exited status=0 after 900s, killing wine prefix ===\n")
+        var f = LaunchDiagnosis.findings(run: clean, launchOptions: options, runner: without, settings: settings)
+        XCTAssertEqual(Set(f.map(\.title)), ["D3DMetal is not downloaded", "Steam cannot start the game with these launch options",
+                                             "Steam's launch options win over this page"])
+        XCTAssertTrue(f.allSatisfy { $0.source == .setup })
+        XCTAssertNil(LaunchDiagnosis.notifiable(f))
+
+        // a quick crash comes from the last run: that is the one to notify, even below setup errors
+        let crash = run("graphics: d3dmetal from settings\n=== wine exited status=3 ===\n=== game exited status=3 after 12s, killing wine prefix ===\n")
+        XCTAssertEqual(crash.exitStatus, 3)
+        f = LaunchDiagnosis.findings(run: crash, launchOptions: options, runner: without, settings: settings)
+        XCTAssertEqual(f.first?.source, .setup, "setup errors sort first")
+        let worst = try XCTUnwrap(LaunchDiagnosis.notifiable(f))
+        XCTAssertEqual(worst.title, "The game closed right after starting")
+        XCTAssertEqual(worst.source, .lastRun)
+
+        // every run-log finding is marked as such
+        let runner = try makeRunner(d3dmetal: true)
+        for body in ["=== prefix ntdll is aa64 and this compatibility tool wants 8664 ===\n",
+                     "=== failed to stage steamclient64.dll ===\n",
+                     "=== aborted during startup (exit 2) before launch ===\n"] {
+            let found = LaunchDiagnosis.findings(run: run(body), launchOptions: nil, runner: runner, settings: GameSettings())
+            XCTAssertEqual(found.map(\.source), [.lastRun], body)
+            XCTAssertEqual(LaunchDiagnosis.notifiable(found), found.first, body)
+        }
+    }
+
     func testLaunchOptionFindings() throws {
         let runner = try makeRunner(d3dmetal: true)
         var f = LaunchDiagnosis.findings(run: nil, launchOptions: SteamLaunchOptions("MTL_HUD_ENABLED=1 %command%"),
@@ -1062,6 +1095,27 @@ final class SteamUpdateTests: XCTestCase {
         } catch {
             XCTAssertEqual(error as? SteamUpdateError, .timedOut(installed: "100", target: "200"))
         }
+        try assertPinned()
+    }
+
+    func testUnexpectedBuildStopsWaitingAndPins() async throws {
+        // Steam installs 300 (a beta, or a build Valve published meanwhile) instead of the checked 200
+        let steam = simulateSteam(installing: "300")
+        let started = Date()
+        do {
+            try await updater(installTimeout: 30).update(report())
+            XCTFail("expected unexpectedBuild")
+        } catch {
+            XCTAssertEqual(error as? SteamUpdateError, .unexpectedBuild(installed: "300", target: "200"))
+            let text = "\(error)"
+            XCTAssertTrue(text.contains("Steam installed 300 instead of 200"), text)
+            XCTAssertTrue(text.contains("has not checked 300"), text)
+            XCTAssertTrue(text.contains("kept on 300"), text)
+            XCTAssertTrue(text.contains("Restore Steam"), text)
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(started), 10, "stops at once, not at the install timeout")
+        await steam.value
+        XCTAssertEqual(SteamStatus(paths: paths.steam).clientBuild, "300")
         try assertPinned()
     }
 

@@ -16,6 +16,9 @@ public enum SteamUpdateError: Error, CustomStringConvertible, Equatable {
     case notPatched
     case timedOut(installed: String?, target: String)
     case hookBroken(String)
+    /// Steam installed a build other than the checked one (a beta channel, or Valve published
+    /// a newer build meanwhile); the pin keeps it there
+    case unexpectedBuild(installed: String, target: String)
 
     public var description: String {
         switch self {
@@ -29,6 +32,8 @@ public enum SteamUpdateError: Error, CustomStringConvertible, Equatable {
             "Steam did not install \(target) in time (still on \(installed ?? "an unknown build")). Steam is pinned again; try once more, or update from Steam's own menu after turning off \"Keep Steam on this build\"."
         case .hookBroken(let why):
             "Steam updated, but the hook did not load fully (\(why)). Use Restore Steam if Steam misbehaves, and report it on GitHub."
+        case .unexpectedBuild(let installed, let target):
+            "Steam installed \(installed) instead of \(target). WovenGames has not checked \(installed) yet; Steam is now kept on \(installed). Use Restore Steam if Steam misbehaves."
         }
     }
 }
@@ -67,7 +72,7 @@ public struct SteamUpdater: Sendable {
             // inside: an unpin that fails halfway has already lifted one of the pins
             try patcher.unpin()
             log("Steam may update at launch now")
-            try await installAndVerify(target: target, log: log)
+            try await installAndVerify(target: target, from: report.installed, log: log)
         } catch {
             try? patcher.pin()
             log("Steam is pinned to its build again")
@@ -77,14 +82,21 @@ public struct SteamUpdater: Sendable {
         log("Steam \(target) works with WovenGames; pinned to it again")
     }
 
-    func installAndVerify(target: String, log: @escaping @Sendable (String) -> Void) async throws {
+    /// `old`: the build installed before the update.
+    func installAndVerify(target: String, from old: String?, log: @escaping @Sendable (String) -> Void) async throws {
         if manageSteamProcess {
             log("starting Steam; it downloads and installs the update, then restarts")
             _ = Shell.capture("/usr/bin/open", ["-a", paths.steamApp.path(percentEncoded: false)])
         }
         var deadline = Date().addingTimeInterval(installTimeout)
         var installed = SteamStatus(paths: paths.steam).clientBuild
+        let old = old ?? installed
         while installed != target {
+            // another build landed: waiting longer cannot bring the target, and Steam must not
+            // keep updating unchecked (update() pins it again on the way out)
+            if let installed, installed != old {
+                throw SteamUpdateError.unexpectedBuild(installed: installed, target: target)
+            }
             guard Date() < deadline else { throw SteamUpdateError.timedOut(installed: installed, target: target) }
             try await Task.sleep(for: .seconds(pollInterval))
             installed = SteamStatus(paths: paths.steam).clientBuild

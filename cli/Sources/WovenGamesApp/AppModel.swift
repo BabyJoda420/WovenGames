@@ -56,6 +56,8 @@ final class AppModel {
     /// when the last update check succeeded
     var lastUpdateCheck: Date?
     @ObservationIgnored var updateLoop: Task<Void, Never>?
+    /// a Steam update has lifted the pin; quitting the app now must pin Steam again
+    var steamUpdateInProgress = false
     @ObservationIgnored var recommendationSync: Task<Void, Never>?
 
     // MARK: settings (AppModel+Settings.swift)

@@ -1,12 +1,16 @@
 // Staying alive in the menu bar after the last window closes, and the Dock icon that goes with it
 
 import AppKit
+import WovenCore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Owned here (not by the App) so Dock clicks and window events reach it from launch on.
     let model = AppModel()
     private var observers: [NSObjectProtocol] = []
+    /// the user chose Quit Anyway while Steam was updating
+    private var quitDuringSteamUpdate = false
+    private var askingToQuit = false
 
     /// Read when asked, so a change in Settings applies at once.
     static var keepsRunningInMenuBar: Bool {
@@ -43,6 +47,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         !Self.keepsRunningInMenuBar
+    }
+
+    // MARK: quitting during a Steam update
+
+    /// A Steam update lifts the pin until it finishes: quitting first asks, and Quit Anyway
+    /// pins Steam again so it stays on whatever build it has now.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard model.steamUpdateInProgress, !quitDuringSteamUpdate else { return .terminateNow }
+        guard !askingToQuit else { return .terminateCancel }
+        askingToQuit = true
+        DispatchQueue.main.async { [self] in
+            let alert = NSAlert()
+            alert.messageText = "Steam is updating. Quit anyway?"
+            alert.informativeText = "Steam stays on its current build."
+            // the safe choice is the default (Return)
+            alert.addButton(withTitle: "Keep Updating")
+            alert.addButton(withTitle: "Quit Anyway")
+            let quit = alert.runModal() == .alertSecondButtonReturn
+            askingToQuit = false
+            guard quit else { return }
+            try? SteamPatcher(paths: model.paths).pin()
+            quitDuringSteamUpdate = true
+            NSApp.terminate(nil)
+        }
+        return .terminateCancel
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // whatever way the quit came, Steam must not stay unpinned
+        if model.steamUpdateInProgress { try? SteamPatcher(paths: model.paths).pin() }
     }
 
     /// A Dock click (or opening the app again in Finder) brings the main window back.

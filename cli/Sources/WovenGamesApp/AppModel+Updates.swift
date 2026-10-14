@@ -120,6 +120,8 @@ extension AppModel {
     /// Moves Steam to Valve's newest build when it is known to work, then pins it again.
     func updateSteam() async {
         let paths = paths
+        steamUpdateInProgress = true
+        defer { steamUpdateInProgress = false }
         await performAsync("Updating Steam") { log in
             // the report on screen can be hours old
             let report = await SteamBuilds.fullReport(paths: paths)

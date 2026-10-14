@@ -46,23 +46,32 @@ extension AppModel {
     func gameEnded(_ appID: String) async {
         runningGames.remove(appID)
         guard let game = games.first(where: { $0.appID == appID }) else { return }
-        // the run script writes the exit status just after the launcher quits
-        _ = await Task.detached { () -> LastRun? in
-            for _ in 0..<10 {
-                if let run = SteamLibrary.lastRun(of: game), run.ended { return run }
-                try? await Task.sleep(for: .seconds(1))
-            }
-            return nil
-        }.value
+        let paths = paths
+        await Task.detached { await Self.waitForSessionEnd(of: game, paths: paths) }.value
         let found = await diagnose(game)
         generation += 1
         appLog("\(game.name) (\(appID)) quit: \(found.first.map { "\($0.severity): \($0.title)" } ?? "no problems found")")
+        // only problems with the launch that just ended; setup findings stay on the Games page
         guard UserDefaults.standard.bool(forKey: Setting.notifyLaunchProblems),
-              let worst = found.first, worst.severity >= .warning else { return }
+              let worst = LaunchDiagnosis.notifiable(found) else { return }
         postNotification(id: "launch-\(appID)",
                          title: worst.severity == .error ? "\(game.name) didn't start" : "\(game.name) closed right after starting",
                          body: worst.title,
                          appID: appID)
+    }
+
+    /// Waits until the run script has finished the session that just ended: it logs
+    /// "=== game exited" only after the game's prefix has been idle for 10 seconds or more,
+    /// then kills the prefix and removes run.pid. The launcher quits while this run is the
+    /// last one in the log (the script logs its header before it creates the launcher).
+    nonisolated static func waitForSessionEnd(of game: InstalledGame, paths: Paths, timeout: Int = 90) async {
+        let sessions = GameSessions(paths: paths)
+        for _ in 0..<timeout {
+            if let run = SteamLibrary.lastRun(of: game), run.ended { return }
+            // the script is gone (run.pid removed, or killed outright): the log will not change
+            if sessions.runScript(appID: game.appID) == nil { return }
+            try? await Task.sleep(for: .seconds(1))
+        }
     }
 
     // MARK: launch findings
