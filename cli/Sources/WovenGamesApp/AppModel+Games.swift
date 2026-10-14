@@ -114,7 +114,7 @@ extension AppModel {
             ? BackendDetector.detect(launchTarget: nil, installDir: game.installDir).backend : nil
         return LaunchDiagnosis.findings(run: SteamLibrary.lastRun(of: game),
                                         launchOptions: SteamLaunchOptions.read(appID: game.appID, paths: paths),
-                                        runner: try? RunnerStore(paths: paths).current(),
+                                        runner: RunnerStore(paths: paths).runner(for: settings),
                                         settings: settings,
                                         detected: detected)
     }

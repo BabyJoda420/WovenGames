@@ -135,6 +135,8 @@ struct GameDetailView: View {
     @State private var lastRun: LastRun?
     @State private var saveError: String?
     @State private var confirmReset = false
+    /// installed runner ids, for the Engine picker
+    @State private var runnerIDs: [String] = []
 
     var body: some View {
         // reads model.launchFindings, which diagnose() refreshes after each run (generation bump)
@@ -184,6 +186,16 @@ struct GameDetailView: View {
                 Section("Advanced") {
                     TextField("Game arguments", text: $settings.gameArgs, prompt: Text(recommended?.gameArgs.isEmpty == false ? recommended!.gameArgs : "e.g. -dx11"))
                     Toggle("msync (faster thread synchronisation)", isOn: $settings.msync)
+                    // only worth showing when there is a choice (or a choice to undo)
+                    if runnerIDs.count > 1 || !settings.runner.isEmpty {
+                        Picker("Engine", selection: $settings.runner) {
+                            Text("Default (\(model.runner?.id ?? "none"))").tag("")
+                            ForEach(runnerIDs, id: \.self) { Text($0).tag($0) }
+                            if !settings.runner.isEmpty && !runnerIDs.contains(settings.runner) {
+                                Text("\(settings.runner) (not installed)").tag(settings.runner)
+                            }
+                        }
+                    }
                     if let saveError {
                         Label(saveError, systemImage: "xmark.octagon.fill").foregroundStyle(.red)
                     }
@@ -212,6 +224,7 @@ struct GameDetailView: View {
             saved = loaded
             settings = loaded
             recommended = GameSettings.recommended(appID: game.appID)
+            runnerIDs = RunnerStore(paths: model.paths).list().map(\.id)
             let dir = game.installDir
             detected = await Task.detached { BackendDetector.detect(launchTarget: nil, installDir: dir) }.value
         }

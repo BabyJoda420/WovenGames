@@ -25,6 +25,8 @@ public struct GameSettings: Equatable, Sendable {
     public var retina = false
     /// extra arguments for the game itself, e.g. "-dx11"
     public var gameArgs = ""
+    /// an installed runner's id to use instead of the current one; empty means the current
+    public var runner = ""
     /// lines for keys this type does not manage, kept verbatim
     public var otherLines: [String] = []
 
@@ -33,6 +35,7 @@ public struct GameSettings: Equatable, Sendable {
     static let msyncKey = "WINEMSYNC"
     static let retinaKey = "WOVEN_RETINA"
     static let argsKey = "WOVEN_GAME_ARGS"
+    static let runnerKey = "WOVEN_RUNNER"
 
     public init() {}
 
@@ -62,6 +65,7 @@ public struct GameSettings: Equatable, Sendable {
             case Self.msyncKey: msync = value != "0"
             case Self.retinaKey, "NOTPROTON_RETINA": retina = value == "1"  // older name still read
             case Self.argsKey: gameArgs = value
+            case Self.runnerKey: runner = value
             default: otherLines.append(line)
             }
         }
@@ -76,6 +80,7 @@ public struct GameSettings: Equatable, Sendable {
         if retina { lines.append("\(Self.retinaKey)=1") }
         let args = gameArgs.trimmingCharacters(in: .whitespaces)
         if !args.isEmpty { lines.append("\(Self.argsKey)=\(args)") }
+        if !runner.isEmpty { lines.append("\(Self.runnerKey)=\(runner)") }
         lines += otherLines
         return lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
     }
@@ -92,6 +97,7 @@ public struct GameSettings: Equatable, Sendable {
         var parts: [String] = []
         if backend != .auto { parts.append(backend.label.components(separatedBy: " (").first ?? backend.rawValue) }
         if !gameArgs.isEmpty { parts.append(gameArgs) }
+        if !runner.isEmpty { parts.append(runner) }
         if metalHUD { parts.append("HUD") }
         if retina { parts.append("Retina") }
         if !msync { parts.append("msync off") }

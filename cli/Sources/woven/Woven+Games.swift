@@ -132,11 +132,12 @@ extension Woven {
 
             func run() throws {
                 let game = try GamesCommand.game(appID)
+                let settings = GameSettings.load(appID: appID)
                 let findings = LaunchDiagnosis.findings(
                     run: SteamLibrary.lastRun(of: game),
                     launchOptions: SteamLaunchOptions.read(appID: appID),
-                    runner: try? RunnerStore().current(),
-                    settings: GameSettings.load(appID: appID),
+                    runner: RunnerStore().runner(for: settings),
+                    settings: settings,
                     detected: BackendDetector.detect(launchTarget: nil, installDir: game.installDir).backend
                 )
                 if findings.isEmpty { print("no problems found"); return }

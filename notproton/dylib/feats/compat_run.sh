@@ -55,31 +55,37 @@ case "$verb" in
     ;;
 esac
 
-CX_ROOT="$HOME/Library/Application Support/WovenGames/runners/current"
-export CX_ROOT
+runners_dir="$HOME/Library/Application Support/WovenGames/runners"
 # cxcompatdb resolves its database through CX_HOME and logs an error for
 # every module loaded without it :(
 export CX_HOME="$HOME/Library/Application Support/CrossOver"
-wine_unix="$CX_ROOT/lib/wine/aarch64-unix"
-WINELOADER="$wine_unix/wine.app/Contents/MacOS/wine"
-WINESERVER="$CX_ROOT/bin/wineserver-arm64"
-if [ ! -x "$WINELOADER" ] || [ ! -x "$WINESERVER" ]; then
-  wine_unix="$CX_ROOT/lib/wine/x86_64-unix"
-  WINELOADER="$wine_unix/wine"
-  WINESERVER="$CX_ROOT/bin/wineserver"
-  [ -x "$WINESERVER" ] || WINESERVER="$CX_ROOT/bin/wineserver-x86"
-fi
-export WINELOADER WINESERVER
-export WINEDLLPATH="$CX_ROOT/lib/wine/x86_64-windows:$wine_unix"
-export PATH="$CX_ROOT/bin:$PATH"
+base_path="$PATH"
+use_runner() { # runner folder
+  CX_ROOT="$1"
+  export CX_ROOT
+  wine_unix="$CX_ROOT/lib/wine/aarch64-unix"
+  WINELOADER="$wine_unix/wine.app/Contents/MacOS/wine"
+  WINESERVER="$CX_ROOT/bin/wineserver-arm64"
+  if [ ! -x "$WINELOADER" ] || [ ! -x "$WINESERVER" ]; then
+    wine_unix="$CX_ROOT/lib/wine/x86_64-unix"
+    WINELOADER="$wine_unix/wine"
+    WINESERVER="$CX_ROOT/bin/wineserver"
+    [ -x "$WINESERVER" ] || WINESERVER="$CX_ROOT/bin/wineserver-x86"
+  fi
+  export WINELOADER WINESERVER
+  export WINEDLLPATH="$CX_ROOT/lib/wine/x86_64-windows:$wine_unix"
+  export PATH="$CX_ROOT/bin:$base_path"
 
-# A self-built runner (steamplay-mac) carries runner.json; its ntdll is patched in source,
-# so there is no binary-patched copy in the bridge to compare against, and msync is on by
-# default because its wineserver carries the msync fixes.
-runner_kind=crossover
-grep -q '"kind": "selfbuilt"' "$CX_ROOT/runner.json" 2>/dev/null && runner_kind=selfbuilt
-msync_default=0
-[ "$runner_kind" = selfbuilt ] && msync_default=1
+  # A self-built runner (steamplay-mac) carries runner.json; its ntdll is patched in source,
+  # so there is no binary-patched copy in the bridge to compare against, and msync is on by
+  # default because its wineserver carries the msync fixes.
+  runner_kind=crossover
+  grep -q '"kind": "selfbuilt"' "$CX_ROOT/runner.json" 2>/dev/null && runner_kind=selfbuilt
+  msync_default=0
+  [ "$runner_kind" = selfbuilt ] && msync_default=1
+  runner_name=$(readlink "$CX_ROOT" 2>/dev/null || basename "$CX_ROOT")
+}
+use_runner "$runners_dir/current"
 
 if [ -n "$STEAM_COMPAT_DATA_PATH" ]; then
   log="$STEAM_COMPAT_DATA_PATH/wovengames-run.log"
@@ -98,7 +104,7 @@ start_epoch=$(date +%s)
   echo "STEAM_COMPAT_DATA_PATH=$STEAM_COMPAT_DATA_PATH"
   echo "STEAM_COMPAT_INSTALL_PATH=$STEAM_COMPAT_INSTALL_PATH"
   echo "STEAM_COMPAT_APP_ID=$STEAM_COMPAT_APP_ID"
-  echo "runner=$(readlink "$CX_ROOT" 2>/dev/null || echo "$CX_ROOT") kind=$runner_kind"
+  echo "runner=$runner_name kind=$runner_kind"
   echo "-- steam env passed through --"
   env | grep -iE '^(Steam|SDL_)' | sort
 } >> "$log" 2>&1 || true
@@ -147,6 +153,21 @@ load_game_env() { # file label
 }
 load_game_env "$HOME/Library/Application Support/WovenGames/compat/$app_id.env" "compat default"
 load_game_env "$HOME/Library/Application Support/WovenGames/games/$app_id.env" "game setting"
+# WovenGames: WOVEN_RUNNER=<id> runs this game on another installed runner (to try a new
+# engine build on one game). An unknown name keeps the current runner.
+if [ -n "$WOVEN_RUNNER" ] && [ "$WOVEN_RUNNER" != "$runner_name" ]; then
+  case "$WOVEN_RUNNER" in
+    current|.*|*/*) echo "runner: WOVEN_RUNNER=$WOVEN_RUNNER is not a runner name; keeping $runner_name" >> "$log" 2>&1 || true ;;
+    *)
+      if [ -f "$runners_dir/$WOVEN_RUNNER/runner.json" ]; then
+        use_runner "$runners_dir/$WOVEN_RUNNER"
+        echo "runner=$runner_name kind=$runner_kind (WOVEN_RUNNER)" >> "$log" 2>&1 || true
+      else
+        echo "runner: $WOVEN_RUNNER is not installed; keeping $runner_name" >> "$log" 2>&1 || true
+      fi
+      ;;
+  esac
+fi
 # The settings' older NOTPROTON_* names still work.
 for n in RETINA SYSHUD SYSHUD_OFFSET HIDE_LAUNCHER_TILE; do
   eval "new=\${WOVEN_$n+x} old=\${NOTPROTON_$n-}"
@@ -595,7 +616,7 @@ if [ "${MTL_HUD_ENABLED:-0}" = 1 ]; then
   if [ "${WOVEN_SYSHUD:-1}" = 1 ] && [ -x "$syshud" ] && [ "$verb" != run ]; then
     rows=$(printf '%s' "$MTL_HUD_ELEMENTS" | tr ',' '\n' | grep -c .)
     case ",$MTL_HUD_ELEMENTS," in *graph*|*histogram*) rows=$((rows + 3)) ;; esac
-    wine_label="$(sed -n 's/.*"wine": "\(.*\)".*/\1/p' "$CX_ROOT/runner.json" 2>/dev/null) ($(readlink "$CX_ROOT" 2>/dev/null || echo runner))"
+    wine_label="$(sed -n 's/.*"wine": "\(.*\)".*/\1/p' "$CX_ROOT/runner.json" 2>/dev/null) ($runner_name)"
     "$syshud" --offset "${WOVEN_SYSHUD_OFFSET:-$((14 + rows * 14))}" \
       --label "Wine: $wine_label" --label "Graphics: ${backend:-${CX_ACTIVE_GRAPHICS_BACKEND:-?}} (Rosetta)" \
       --pid $$ --app "com.wovengames.launcher.$app_id" >> "$log" 2>&1 &  # exits with this pid
