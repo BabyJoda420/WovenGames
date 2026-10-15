@@ -9,6 +9,7 @@ shift || true
 # launch options.
 launch_env=""
 launch_names=""
+backend_src=""
 argc=$#
 argi=0
 while [ "$argi" -lt "$argc" ]; do
@@ -20,6 +21,7 @@ while [ "$argi" -lt "$argc" ]; do
       export "$arg"
       launch_env="$launch_env $arg"
       launch_names="$launch_names ${arg%%=*}"
+      case "$arg" in CX_GRAPHICS_BACKEND=*) backend_src=launch-options ;; esac
       ;;
     *) set -- "$@" "$arg" ;;
   esac
@@ -43,6 +45,7 @@ if [ -r "$global_env" ]; then
         # shellcheck disable=SC2163 # line is a NAME=VALUE pair
         export "$line"
         launch_env="$launch_env $line"
+        case "$line" in CX_GRAPHICS_BACKEND=*) backend_src=global.env ;; esac
         ;;
     esac
   done < "$global_env"
@@ -147,6 +150,7 @@ load_game_env() { # file label
         export "$line"
         launch_env="$launch_env $line"
         echo "$2: $line" >> "$log" 2>&1 || true
+        case "$line" in CX_GRAPHICS_BACKEND=*) backend_src="$2" ;; esac
         ;;
     esac
   done < "$1"
@@ -570,7 +574,8 @@ detect_d3d() {
 }
 if [ "$runner_kind" = selfbuilt ]; then
   backend="${CX_GRAPHICS_BACKEND:-auto}"
-  backend_from=launch-options
+  # where CX_GRAPHICS_BACKEND came from: launch options, global.env or a game file
+  backend_from="${backend_src:-launch-options}"
   if [ "$backend" = auto ]; then
     api=$(detect_d3d "$1")
     case "$api" in
