@@ -4,6 +4,8 @@ What changed in each WovenGames release, newest first. Each release on GitHub sh
 
 ## Unreleased
 
+## 0.3.0-beta.3 — 2026-10-15
+
 ### New
 - **How well a game runs, up front.** A tested game's page now shows a card with how it ran on the Mac we
   tested it on (runs well / playable with compromises / runs poorly / doesn't work), tips for playing it, and
