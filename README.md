@@ -35,6 +35,8 @@ CrossOver licence. WovenGames is free and open source.
 - **Snapshots**: on a game's page, **Snapshots → Take Snapshot Now** saves the game's Windows setup, so you can go
   back if something breaks. WovenGames also takes one before every engine update.
 - Games show up in macOS **Game Mode** with their own Dock icon.
+- Games we've tested show a card on their page with how well they ran on our Mac, next to yours, so you know
+  before you buy or download whether your Mac can handle them.
 
 ### Games we've tested
 
@@ -42,7 +44,7 @@ CrossOver licence. WovenGames is free and open source.
 |---|---|
 | Billie's Wheelie | ✅ Runs smoothly |
 | Life is Strange: Double Exposure | 🟡 Plays at about 45 fps with WovenGames' recommended settings; the DirectX 12 mode hangs in the menu (being worked on) |
-| Clair Obscur: Expedition 33 | 🟡 Plays on D3DMetal, with one or two visual quirks. On a MacBook Air, set the game's resolution to 1280×832 or 1470×956 (Settings → Graphics): about 2.5–3× faster than the screen's full resolution |
+| Clair Obscur: Expedition 33 | 🟡 Playable on a MacBook Air M4: about 35 fps at 1280×832 on the lowest preset, and it looks rough. Set that resolution in the game (Settings → Graphics); at full resolution it runs at under 10 fps. Use D3DMetal (the default): DXMT draws the shadows wrong |
 
 **Tip:** games run at your screen's full resolution by default, which is often too much for the Mac's graphics chip, especially on a MacBook Air. Picking about half the screen resolution in the game's graphics settings is the biggest speed-up.
 

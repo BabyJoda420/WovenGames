@@ -4,6 +4,19 @@ What changed in each WovenGames release, newest first. Each release on GitHub sh
 
 ## Unreleased
 
+## 0.3.0-beta.3 — 2026-10-15
+
+### New
+- **How well a game runs, up front.** A tested game's page now shows a card with how it ran on the Mac we
+  tested it on (runs well / playable with compromises / runs poorly / doesn't work), tips for playing it, and
+  your own Mac's chip and memory to compare. These reports update from GitHub without a new app version.
+
+### Improved
+- *Clair Obscur: Expedition 33*: WovenGames now keeps it on D3DMetal and shows its report: about 35 fps at
+  1280×832 on a MacBook Air M4. DXMT draws its shadows as a checkerboard, so it isn't used.
+- A game's launch log now says where its graphics mode came from (your game settings, WovenGames'
+  recommendation, Steam launch options), instead of always "launch options".
+
 ## 0.3.0-beta.2 — 2026-10-14
 
 ### Improved

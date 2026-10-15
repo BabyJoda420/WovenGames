@@ -136,6 +136,7 @@ struct GameDetailView: View {
     @State private var saved: GameSettings?
     @State private var detected: BackendDetection?
     @State private var recommended: GameSettings?
+    @State private var report: GameReport?
     @State private var lastRun: LastRun?
     @State private var saveError: String?
     @State private var confirmReset = false
@@ -160,6 +161,13 @@ struct GameDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             Divider()
             Form {
+                if let report {
+                    Section {
+                        GameReportCard(report: report)
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets())
+                    }
+                }
                 if !findings.isEmpty {
                     Section {
                         ForEach(findings) { finding in
@@ -249,6 +257,7 @@ struct GameDetailView: View {
             saved = loaded
             settings = loaded
             recommended = GameSettings.recommended(appID: game.appID)
+            report = GameReport.load(appID: game.appID)
             runnerIDs = RunnerStore(paths: model.paths).list().map(\.id)
             let dir = game.installDir
             detected = await Task.detached { BackendDetector.detect(launchTarget: nil, installDir: dir) }.value
@@ -341,6 +350,48 @@ private struct GameHeader: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
             }
             .padding(16)
+        }
+    }
+}
+
+/// How the game ran when WovenGames tested it (the #! lines of compat/<appid>.env), next to this Mac,
+/// so players know up front when a game is too much for their Mac.
+private struct GameReportCard: View {
+    let report: GameReport
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: style.icon)
+                .foregroundStyle(style.color)
+                .font(.title3)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(report.rating?.label ?? "Tested by WovenGames").font(.headline)
+                ForEach(Array(report.notes.enumerated()), id: \.offset) { _, note in
+                    Text(note).font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text(macLine).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(style.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var macLine: String {
+        let mine = "Your Mac: \(MacInfo.current.description)."
+        return report.tested.isEmpty ? mine : "Tested on a \(report.tested). \(mine)"
+    }
+
+    private var style: (icon: String, color: Color) {
+        switch report.rating {
+        case .great: ("checkmark.circle.fill", .green)
+        case .playable: ("gauge.with.dots.needle.33percent", .yellow)
+        case .poor: ("tortoise.fill", .orange)
+        case .broken: ("xmark.octagon.fill", .red)
+        case nil: ("info.circle", .secondary)
         }
     }
 }
