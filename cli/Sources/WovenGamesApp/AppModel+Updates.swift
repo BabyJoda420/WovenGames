@@ -37,7 +37,9 @@ extension AppModel {
         guard !checkingForUpdates else { return }
         checkingForUpdates = true
         defer { checkingForUpdates = false }
-        let check = UpdateCheck(current: appVersionValue, includeBetas: UserDefaults.standard.bool(forKey: Setting.includeBetas))
+        // the engine can be older than the app (the app was updated from the zip): then the
+        // release matching the app is offered for its engine
+        let check = UpdateCheck(current: UpdateCheck.baseline(app: appVersionValue, paths: paths), includeBetas: UserDefaults.standard.bool(forKey: Setting.includeBetas))
         do {
             let release = try await Task.detached { try await check.newer() }.value
             availableUpdate = release
@@ -63,13 +65,14 @@ extension AppModel {
         let version = release.version?.description ?? release.tag_name
         let paths = paths
         let running = Bundle.main.bundleURL
+        let onlyEngine = release.onlyEngine(forApp: appVersionValue)
         let devBuild = running.pathExtension != "app" || running.path(percentEncoded: false).contains("/.build/")
         await performAsync("Installing WovenGames \(version)") { [self] log in
             // the engine is replaced under a running game otherwise
             guard !RunnerStore(paths: paths).inUse() else { throw AppUpdateError.gameRunning }
             // the app is downloaded and checked first: if that fails, the engine stays the one
             // this app was made with
-            let newApp = release.appArchive == nil ? nil
+            let newApp = release.appArchive == nil || onlyEngine ? nil
                 : try await AppUpdate.download(release, staging: paths.support.appending(path: "updates/\(version)"), log: log)
             if let engine = release.engineArchive {
                 try await ReleaseInstaller(paths: paths).install(archive: engine, log: log)
@@ -93,6 +96,8 @@ extension AppModel {
             log("restarting into WovenGames \(version)")
             await relaunch()
         }
+        // an engine-only update does not relaunch: clear the banner if the engine is current now
+        if onlyEngine { await checkForUpdates(manual: false) }
     }
 
     /// Moves `old` to the Trash and `new` into its place; puts `old` back if the move fails.

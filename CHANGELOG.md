@@ -4,6 +4,44 @@ What changed in each WovenGames release, newest first. Each release on GitHub sh
 
 ## Unreleased
 
+## 0.3.0 — 2026-10-16
+
+Everything from the 0.3.0 betas, plus one fix.
+
+### New
+- **Windows games from outside Steam.** Add any Windows game (GOG, itch.io, a disc install …) with **+** on the
+  Games page. It runs like a Steam game: automatic graphics choice, per-game settings, Game Mode, launch problem
+  help and Force Quit.
+- **How well a game runs, up front.** A tested game's page shows a card with how it ran on the Mac we tested it on
+  (runs well / playable with compromises / runs poorly / doesn't work), tips for playing it, and your own Mac's
+  chip and memory to compare. These reports update from GitHub without a new app version.
+- **Prefix snapshots.** Save a game's Windows environment (prefix) from its page with **Snapshots → Take Snapshot
+  Now**, and put it back later. Snapshots are instant and take no extra disk space until the game changes its
+  files. WovenGames also takes one automatically before every engine update.
+- **Uninstall WovenGames** (app menu): restores Steam to how it was and removes WovenGames. Your games' prefixes
+  and saves are kept unless you choose to delete them.
+- **Engine per game.** When more than one engine version is installed, a game's page lets you pick which one it
+  uses, so a new engine can be tried on one game first.
+
+### Improved
+- Tested *Clair Obscur: Expedition 33*: playable on a MacBook Air M4 at about 35 fps at 1280×832 on the lowest
+  preset. WovenGames keeps it on D3DMetal, because DXMT draws its shadows as a checkerboard.
+- Tip in the README: choosing about half your screen's resolution in a game's graphics settings is the biggest
+  speed-up, especially on a MacBook Air.
+- When an Unreal Engine game closes right after starting, WovenGames suggests DXMT **with** the `-dx11` option it
+  needs, as one click.
+- Launch options typed in the wrong place in Steam can be moved into the game's WovenGames settings with one click.
+- A game's launch log says where its graphics mode came from (your settings, WovenGames' recommendation, Steam
+  launch options or automatic).
+- `woven doctor` checks the App Management permission that patching Steam needs.
+
+### Fixed
+- **Engine updates after replacing the app.** If you updated WovenGames by downloading its zip from GitHub instead
+  of updating in the app, WovenGames thought it was already up to date and kept the older game engine. It now
+  notices when the engine is behind the app and installs the matching engine, without downloading the app again.
+- After setting up or restoring Steam, Steam was left closed; it now opens again if it was open.
+- The main Steam library could be read twice, which would have broken deleting prefixes.
+
 ## 0.3.0-beta.3 — 2026-10-15
 
 ### New

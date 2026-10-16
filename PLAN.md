@@ -95,7 +95,7 @@ so we never redistribute Apple's files.
 **Signing (decided 2026-10-14, final):** releases are ad-hoc signed. There will be **no Apple Developer ID and
 no notarization**, so users right-click → Open on first launch. This isn't an open question; design around it.
 
-### v0.3 (scope agreed 2026-10-14)
+### v0.3 (scope agreed 2026-10-14, released as 0.3.0 on 2026-10-16; I1 moves to v0.4)
 
 | # | Item | Size | Status |
 |---|---|---|---|
@@ -109,6 +109,9 @@ no notarization**, so users right-click → Open on first launch. This isn't an 
 | F4 | Per-game runner (`WOVEN_RUNNER=<id>`), so a patched engine can be tried on one game | M | ✅ |
 
 Build order: I3, I4, F1 → F4 (needed to test I1 safely) → I1 → I2 → F2 → F3.
+Added during the betas: game reports (`#! rating/tested/note` in `compat/<appid>.env`, shown as a card on the
+game page next to this Mac's chip and memory); `steam patch` restarts Steam; the update check also compares the
+installed engine's version.
 Later: per-game Windows version and virtual desktop, MetalFX upscaling, sharing working settings from the app,
 prefix templates and persistent shader caches (once measured).
 
@@ -118,7 +121,7 @@ prefix templates and persistent shader caches (once measured).
 |---|---|---|
 | Billie's Wheelie (3180310) | Unity 2022.3, D3D11 | ✅ smooth on DXMT (after the Unity detection fix; wined3d was broken) |
 | Life is Strange: Double Exposure (1874000) | UE5, D3D12 | 🟡 D3D12/D3DMetal hangs in the menu (spins in `DXGIAdapter::QueryVideoMemoryInfo`). `-dx11` on DXMT: gameplay ~45 fps with a few hitches. Menu: exclusive fullscreen at native 2560×1664 lands in the top-left corner without Retina mode (`WOVEN_RETINA=1` fixes it); the title scene is GPU-bound at ~337 ms/frame at native resolution (`compat/1874000.env`) |
-| Clair Obscur: Expedition 33 (1903340) | UE5, D3D12 | 🟡 starts and plays on D3DMetal (picked automatically), no menu hang; one or two visual quirks. MacBook Air M4 16 GB, title screen, median fps: 2560×1664 native 37 fps (gameplay 8–10 fps on Low, player report), 1470×956 87 fps, 1280×832 103 fps (2.3–2.8×). GPU at 98%: GPU-bound by resolution. No fps change from FSR 4 off, `r.Streaming.PoolSize=2048`, `D3DM_SUPPORT_DXR=0` or a 30 fps cap, so the D3DMetal 24 GB budget lead does not explain this game's speed. Chip reached ~88 °C; a fanless Air throttles in longer sessions. DXMT with `-dx11` also starts, at about half the memory; fps not measured yet |
+| Clair Obscur: Expedition 33 (1903340) | UE5, D3D12 | 🟡 starts and plays on D3DMetal (picked automatically), no menu hang; one or two visual quirks. MacBook Air M4 16 GB, title screen, median fps: 2560×1664 native 37 fps (gameplay 8–10 fps on Low, player report), 1470×956 87 fps, 1280×832 103 fps (2.3–2.8×). GPU at 98%: GPU-bound by resolution. No fps change from FSR 4 off, `r.Streaming.PoolSize=2048`, `D3DM_SUPPORT_DXR=0` or a 30 fps cap, so the D3DMetal 24 GB budget lead does not explain this game's speed. Chip reached ~88 °C; a fanless Air throttles in longer sessions. DXMT with `-dx11`: title screen 108.7 fps at 1280×832 at about half the memory, but in gameplay the shadows render as a large checkerboard (DXMT bug), so `compat/1903340.env` pins D3DMetal. Gameplay on D3DMetal at 1280×832, Low: a steady ~35 fps with fewer stutters than DXMT (player report); report card: playable |
 
 ### Known quirks
 

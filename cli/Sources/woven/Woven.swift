@@ -6,7 +6,7 @@ import WovenCore
 struct Woven: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "WovenGames: play Windows games on Apple Silicon.",
-        version: "0.3.0-beta.3",
+        version: "0.3.0",
         subcommands: [Doctor.self, Install.self, Setup.self, Uninstall.self, RunnerCommand.self, PrefixCommand.self, BackendCommand.self, Run.self, SteamCommand.self, GamesCommand.self, SnapshotCommand.self, CompatCommand.self, Update.self, Report.self]
     )
 }

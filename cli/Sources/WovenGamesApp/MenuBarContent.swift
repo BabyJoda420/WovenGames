@@ -55,7 +55,7 @@ struct MenuBarContent: View {
                 .help("Applies the next time a game starts")
 
             if let update = model.availableUpdate {
-                Button("Update to \(update.version?.description ?? update.tag_name)…") {
+                Button(update.onlyEngine(forApp: model.appVersionValue) ? "Update Engine…" : "Update to \(update.version?.description ?? update.tag_name)…") {
                     UserDefaults.standard.set(SidebarItem.status.rawValue, forKey: "section")
                     model.showMainWindow()
                 }
