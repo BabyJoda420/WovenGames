@@ -24,7 +24,7 @@ public enum SteamPatchError: Error, CustomStringConvertible {
         switch self {
         case .steamMissing: "Steam is not installed in /Applications"
         case .notSetUp: "the hook is not installed yet; run `woven setup` first"
-        case .stillRunning: "Steam is still running; quit it and retry"
+        case .stillRunning: "Steam did not quit (it may be asking something in its window); quit it and retry"
         case .foreignInsert(let lib): "Steam already injects \(lib), which is not WovenGames or NotProton; not touching it"
         case .plist(let why): "could not update Steam's Info.plist: \(why)"
         case .command(let cmd, let out): "\(cmd) failed: \(out)\nIf this is a permission error, allow your terminal under System Settings > Privacy & Security > App Management."
@@ -282,13 +282,48 @@ public struct SteamPatcher: Sendable {
     @discardableResult
     public func quitSteam(log: (String) -> Void) throws -> Bool {
         guard manageSteamProcess else { return false }
-        func running() -> Bool { Shell.capture("/usr/bin/pgrep", ["-x", "steam_osx"]).status == 0 }
+        let user = String(getuid())
+        func pid() -> String? {
+            let r = Shell.capture("/usr/bin/pgrep", ["-u", user, "-x", "steam_osx"])
+            return r.status == 0 ? r.output.split(separator: "\n").first.map { $0.trimmingCharacters(in: .whitespaces) } : nil
+        }
+        func running() -> Bool { pid() != nil }
         guard running() else { return false }
         log("quitting Steam...")
-        _ = Shell.capture("/usr/bin/osascript", ["-e", "quit app \"Steam\""])
+        // a hung Steam would hold an Apple event for two minutes
+        _ = Shell.capture("/usr/bin/osascript", ["-e", "with timeout of 10 seconds", "-e", "quit app \"Steam\"", "-e", "end timeout"])
         for _ in 0..<60 where running() { Thread.sleep(forTimeInterval: 0.5) }
+        if let stuck = pid(), Shell.capture("/usr/bin/pgrep", ["-u", user, "-f", Self.helperPattern]).status != 0,
+           Self.stuckInExit(sample: Self.sampleMainThread(pid: stuck)) {
+            log("Steam is stuck closing; force-quitting it")
+            _ = Shell.capture("/bin/kill", ["-KILL", stuck])
+            for _ in 0..<20 where running() { Thread.sleep(forTimeInterval: 0.5) }
+        }
         if running() { throw SteamPatchError.stillRunning }
         return true
+    }
+
+    /// Steam's web helper processes, which draw its windows.
+    static let helperPattern = "Steam Helper|steamwebhelper"
+
+    /// Steam can hang in its own exit code, waiting for its web helper after the helper has gone
+    /// (seen on build 1791918634: chromehtml.dylib's exit handler polls a semaphore forever). Only
+    /// that is force-quit: no helper left, and the main thread inside exit(). A Steam installing
+    /// its own update or uploading cloud saves on the way out is not in exit() yet, and is left alone.
+    static func stuckInExit(sample: String) -> Bool {
+        // the main thread's block runs up to the next thread
+        guard let start = sample.range(of: "com.apple.main-thread") else { return false }
+        let rest = sample[start.upperBound...]
+        let main = rest.range(of: "Thread_").map { rest[..<$0.lowerBound] } ?? rest
+        return main.contains("exit  (in libsystem_c.dylib)") || main.contains("__cxa_finalize")
+    }
+
+    /// One second of `sample` (no extra permission needed for one's own processes).
+    static func sampleMainThread(pid: String) -> String {
+        let file = FileManager.default.temporaryDirectory.appending(path: "woven-steam-sample-\(UUID().uuidString).txt")
+        defer { try? FileManager.default.removeItem(at: file) }
+        _ = Shell.capture("/usr/bin/sample", [pid, "1", "-file", file.path(percentEncoded: false)])
+        return (try? String(contentsOf: file, encoding: .utf8)) ?? ""
     }
 
     func startSteam() {
