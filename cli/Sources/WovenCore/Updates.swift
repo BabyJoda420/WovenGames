@@ -80,6 +80,8 @@ public struct GitHubRelease: Decodable, Sendable {
     }
 
     public var engineArchive: URL? { asset(prefix: "wovengames-engine-", suffix: ".tar.xz") }
+    /// True when this release is not newer than the running app: only its engine is missing.
+    public func onlyEngine(forApp app: Version) -> Bool { version.map { !($0 > app) } ?? false }
     public var appArchive: URL? { asset(prefix: "WovenGames-", suffix: ".zip") }
 }
 
@@ -102,6 +104,14 @@ public struct UpdateCheck: Sendable {
             throw ReleaseError.download("the release list", "GitHub answered \((response as? HTTPURLResponse)?.statusCode ?? 0)")
         }
         return pick(from: try JSONDecoder().decode([GitHubRelease].self, from: data))
+    }
+
+    /// What releases are compared against: the app's version, or the installed engine's when that
+    /// is older. An app updated from the zip keeps the previous engine until an update installs it.
+    public static func baseline(app: Version, paths: Paths = Paths()) -> Version {
+        guard let text = try? String(contentsOf: paths.engineVersionFile, encoding: .utf8),
+              let engine = Version(text), engine < app else { return app }
+        return engine
     }
 
     func pick(from releases: [GitHubRelease]) -> GitHubRelease? {

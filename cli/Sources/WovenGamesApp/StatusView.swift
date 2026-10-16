@@ -183,10 +183,17 @@ struct StatusView: View {
                 .font(.title2)
                 .foregroundStyle(.tint)
             VStack(alignment: .leading, spacing: 2) {
-                Text("WovenGames \(update.version?.description ?? update.tag_name) is available\(update.prerelease ? " · Beta" : "")")
-                    .font(.headline)
-                Text("Installs the new engine, then replaces this app and reopens it.")
-                    .font(.caption).foregroundStyle(.secondary)
+                if update.onlyEngine(forApp: model.appVersionValue) {
+                    Text("The engine for WovenGames \(update.version?.description ?? update.tag_name) is not installed yet")
+                        .font(.headline)
+                    Text("This app was updated, but its engine is still the previous one. Installs the matching engine.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text("WovenGames \(update.version?.description ?? update.tag_name) is available\(update.prerelease ? " · Beta" : "")")
+                        .font(.headline)
+                    Text("Installs the new engine, then replaces this app and reopens it.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
             Spacer()
             Button("What's New") {

@@ -195,18 +195,23 @@ extension Woven {
         @Flag(help: "Include beta releases.") var beta = false
 
         func run() async throws {
-            let current = Version(Woven.configuration.version)!
+            let app = Version(Woven.configuration.version)!
+            // an older engine than this tool counts too: it gets the engine of the matching release
+            let current = UpdateCheck.baseline(app: app)
             let release: GitHubRelease?
             do { release = try await UpdateCheck(current: current, includeBetas: beta).newer() } catch { throw fail(error) }
             guard let release, let version = release.version else {
                 print("WovenGames is up to date (\(current))")
                 return
             }
-            print("WovenGames \(version) is available: \(release.html_url)")
+            print(release.onlyEngine(forApp: app)
+                  ? "The engine is \(current); WovenGames \(version)'s engine is available: \(release.html_url)"
+                  : "WovenGames \(version) is available: \(release.html_url)")
             if check { return }
             guard let archive = release.engineArchive else { throw fail(Message("release \(version) has no engine archive")) }
             do { try await ReleaseInstaller().install(archive: archive) { print($0) } } catch { throw fail(error) }
             print("engine \(version) installed")
+            if release.onlyEngine(forApp: app) { return }
             print("Update the app itself from the WovenGames app, or download the zip from \(release.html_url)")
         }
     }
