@@ -4,6 +4,14 @@ What changed in each WovenGames release, newest first. Each release on GitHub sh
 
 ## Unreleased
 
+## 0.3.1 — 2026-10-16
+
+### Fixed
+- Steam sometimes hangs at the very end of closing, and then patching or restoring Steam gave up with "Steam is
+  still running". WovenGames now recognises exactly that case and force-quits Steam, which loses nothing because
+  Steam has already finished closing down. A Steam that is still busy (updating itself, uploading saves, or asking
+  you something) is never force-quit.
+
 ## 0.3.0 — 2026-10-16
 
 Everything from the 0.3.0 betas, plus one fix.
