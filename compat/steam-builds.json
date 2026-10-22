@@ -64,6 +64,24 @@
       "unresolved": 0,
       "checked": "2026-10-17",
       "live": false
+    },
+    {
+      "build": 1792618285,
+      "channel": "public",
+      "signatures": "1790904859",
+      "resolved": 17,
+      "unresolved": 0,
+      "checked": "2026-10-22",
+      "live": false
+    },
+    {
+      "build": 1792626604,
+      "channel": "publicbeta",
+      "signatures": "1790904859",
+      "resolved": 17,
+      "unresolved": 0,
+      "checked": "2026-10-22",
+      "live": false
     }
   ]
 }
