@@ -109,6 +109,15 @@
       "unresolved": 0,
       "checked": "2026-10-29",
       "live": false
+    },
+    {
+      "build": 1793740892,
+      "channel": "publicbeta",
+      "signatures": "1790904859",
+      "resolved": 17,
+      "unresolved": 0,
+      "checked": "2026-11-04",
+      "live": false
     }
   ]
 }
